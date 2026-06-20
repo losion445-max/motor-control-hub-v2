@@ -481,6 +481,12 @@ func (m *Motor) RunUntilTorque(ctx context.Context, speedRPM int, maxTorquePct i
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
+// ReadMotionState reads position, torque, and fault in two optimised FC04 batches.
+// Public alias for use by higher-level packages (robot, etc.).
+func (m *Motor) ReadMotionState() (pos int32, torque int16, fault uint16, err error) {
+	return m.readMotionState()
+}
+
 // readMotionState reads position, torque, and fault in two optimised FC04 batches.
 //
 // Batch 1: torque only (0x09, 1 register).
