@@ -1,6 +1,7 @@
 // Package runner executes a parsed G-code program on a cable robot.
-// It imports both pkg/gcode and pkg/robot; neither of those packages
-// imports the other, preserving their independence.
+// It imports pkg/gcode but not pkg/robot — it accepts any value that satisfies
+// the System interface, which *robot.System happens to implement. This keeps
+// pkg/robot and pkg/gcode independent of each other.
 //
 // Usage:
 //
@@ -14,8 +15,16 @@ import (
 	"math"
 
 	"github.com/losion445-max/motor-control-hub-v2/pkg/gcode"
-	"github.com/losion445-max/motor-control-hub-v2/pkg/robot"
 )
+
+// System is the interface that runner requires. *robot.System satisfies it.
+type System interface {
+	MoveTo(ctx context.Context, x, y, speedMmPerSec float64) error
+	LineTo(ctx context.Context, x, y, speedMmPerSec float64) error
+	Home(ctx context.Context) error
+	EmergencyStop() error
+	Position() (float64, float64)
+}
 
 // Opts controls execution behaviour.
 type Opts struct {
@@ -38,7 +47,7 @@ var DefaultOpts = Opts{
 // The system must already be homed. Feed rate is modal — the last F value
 // seen in the program persists for subsequent G1 moves until changed.
 // Cancelling ctx performs an emergency stop.
-func Run(ctx context.Context, sys *robot.System, cmds []gcode.Cmd, opts Opts) error {
+func Run(ctx context.Context, sys System, cmds []gcode.Cmd, opts Opts) error {
 	if opts.RapidMmPerSec <= 0 {
 		opts.RapidMmPerSec = DefaultOpts.RapidMmPerSec
 	}
