@@ -20,6 +20,7 @@ const (
 	ParamPulseDir       uint16 = 36  // P-036: 0=normal, 1=reverse
 	ParamAccelTime      uint16 = 60  // P-060: accel time (ms per 1000 rpm, default=100)
 	ParamDecelTime      uint16 = 61  // P-061: decel time (ms per 1000 rpm, default=100)
+	ParamTorqueLimit    uint16 = 69  // P-069: torque limit (% of rated, default=300; set lower to cap tension)
 	ParamMaxSpeed       uint16 = 75  // P-075: max speed (rpm, default=3000)
 	ParamJogSpeed       uint16 = 76  // P-076: JOG speed (rpm, default=100)
 	ParamServoOnMode    uint16 = 98  // P-098: 0=external SON pin, 1=always ON
