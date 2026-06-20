@@ -35,6 +35,12 @@ type Config struct {
 	// 0 = leave P-060/P-061 at whatever the drive currently has (no profile applied).
 	AccelMmPerSec2 float64
 
+	// InterpStepMM is the waypoint spacing used by LineTo for straight-line
+	// interpolation. Smaller values give a straighter camera path at the cost
+	// of more Modbus transactions. 25 mm gives <0.1 mm path error across the
+	// full 1400×2400 mm workspace.
+	InterpStepMM float64
+
 	// Passive tension hold (after a move or on demand)
 	HoldTensionPct int // torque cap for the tension-hold mode (P-069, % of rated)
 	HoldTensionRPM int // slow winding speed for tension-hold mode
@@ -50,6 +56,7 @@ var DefaultConfig = Config{
 	HomingTorquePct: 18,
 
 	AccelMmPerSec2: 1000,
+	InterpStepMM:   25,
 
 	TorqueSafetyPct: 75,
 
