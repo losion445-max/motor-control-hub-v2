@@ -15,7 +15,7 @@ const (
 	multiApproachRPM = 30 // final approach speed for all motors (RPM)
 	multiTolerance   = 50 // stop when remaining ≤ this (pulses, ~2 mm at r=67.8)
 	multiApproachK   = 5  // approach zone = K × motorSpeedRPM (pulses)
-	minApproach      = 500
+	minApproach      = 50 // floor for approach zone (pulses, ~2 mm); keeps it sane for short LineTo steps
 
 	multiPollInterval = 15 * time.Millisecond
 	multiStopSettle   = 150 * time.Millisecond
@@ -343,10 +343,7 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 	}
 	if collectiveApproach < minApproach {
 		// Fallback: heuristic (covers low-speed or zero-accel config cases).
-		collectiveApproach = int64(multiApproachK * maxSpeedRPM)
-		if collectiveApproach < minApproach {
-			collectiveApproach = minApproach
-		}
+		collectiveApproach = max(int64(multiApproachK*maxSpeedRPM), minApproach)
 	}
 
 	done := [4]bool{}
@@ -445,6 +442,11 @@ func (s *System) collectiveSlowdown(done [4]bool, pulses [4]int64, speeds [4]int
 		approachRPM := multiApproachRPM
 		if speeds[i] > 0 && maxSpeedRPM > 0 {
 			approachRPM = multiApproachRPM * speeds[i] / maxSpeedRPM
+		}
+		// Never exceed the commanded speed — at low G1 feedrates multiApproachRPM
+		// can be higher than speeds[i], which would accelerate instead of slow down.
+		if approachRPM > speeds[i] {
+			approachRPM = speeds[i]
 		}
 		if approachRPM < 1 {
 			approachRPM = 1
