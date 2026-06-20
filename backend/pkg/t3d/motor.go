@@ -373,7 +373,9 @@ func (m *Motor) MoveByPulses(ctx context.Context, pulses int64, speedRPM int) er
 	}
 
 	// Switch to approach speed when this many pulses remain.
-	// Rule of thumb: 5 × speedRPM pulses gives enough room to decelerate.
+	// Heuristic: 5 × speedRPM pulses (≈ one motor revolution at that RPM)
+	// gives enough distance to decelerate from full speed to moveApproachRPM
+	// without overshoot at 19200 baud poll rates (~15 ms per sample).
 	approach := int64(speedRPM) * 5
 	if approach < 500 {
 		approach = 500

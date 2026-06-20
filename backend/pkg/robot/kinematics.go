@@ -44,6 +44,8 @@ func mmToPulses(mm, drumRadiusMM float64) int64 {
 }
 
 // rpmToMMperSec converts motor RPM to cable linear speed (mm/s).
+//
+//	mm/s = RPM × circumference / 60  =  RPM × 2π × r / 60
 func rpmToMMperSec(rpm, drumRadiusMM float64) float64 {
 	return rpm * 2 * math.Pi * drumRadiusMM / 60
 }

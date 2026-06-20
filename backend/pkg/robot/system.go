@@ -397,7 +397,10 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 			}
 			remaining := absPulses - traveled
 
-			// Collective slowdown: triggered by whichever motor leads.
+			// Collective slowdown: triggered by whichever motor leads first.
+			// Using any motor (not just the master) as the trigger is conservative:
+			// a cable that is nearly done must not overshoot while waiting for
+			// slower cables, as slack causes loss of position.
 			if !inApproach && remaining <= collectiveApproach {
 				inApproach = true
 				if err := s.collectiveSlowdown(done, pulses, speeds, maxSpeedRPM); err != nil {
