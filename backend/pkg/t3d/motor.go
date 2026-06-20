@@ -314,6 +314,32 @@ func (m *Motor) SetTorqueLimit(pct int) error {
 	return m.WriteParam(ParamTorqueLimit, uint16(pct))
 }
 
+// SetAccelTime sets P-060 — the acceleration ramp time in milliseconds per 1000 RPM.
+// Lower values = faster acceleration; factory default is 100 ms/1000 rpm.
+// Use motion.AccelToT3DParam to convert from mm/s² to this value.
+func (m *Motor) SetAccelTime(msPerKRPM int) error {
+	if msPerKRPM < 1 {
+		msPerKRPM = 1
+	}
+	if msPerKRPM > 30000 {
+		msPerKRPM = 30000
+	}
+	return m.WriteParam(ParamAccelTime, uint16(msPerKRPM))
+}
+
+// SetDecelTime sets P-061 — the deceleration ramp time in milliseconds per 1000 RPM.
+// Lower values = faster braking; factory default is 100 ms/1000 rpm.
+// Use motion.AccelToT3DParam to convert from mm/s² to this value.
+func (m *Motor) SetDecelTime(msPerKRPM int) error {
+	if msPerKRPM < 1 {
+		msPerKRPM = 1
+	}
+	if msPerKRPM > 30000 {
+		msPerKRPM = 30000
+	}
+	return m.WriteParam(ParamDecelTime, uint16(msPerKRPM))
+}
+
 // ── High-level motion commands ────────────────────────────────────────────────
 
 // MoveByPulses moves the motor by exactly `pulses` encoder counts at `speedRPM`.

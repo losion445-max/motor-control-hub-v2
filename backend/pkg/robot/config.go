@@ -31,6 +31,10 @@ type Config struct {
 	// Motion safety
 	TorqueSafetyPct int // emergency stop if |torque| ≥ this during any move (% of rated)
 
+	// Acceleration for trapezoidal speed profile (mm/s²).
+	// 0 = leave P-060/P-061 at whatever the drive currently has (no profile applied).
+	AccelMmPerSec2 float64
+
 	// Passive tension hold (after a move or on demand)
 	HoldTensionPct int // torque cap for the tension-hold mode (P-069, % of rated)
 	HoldTensionRPM int // slow winding speed for tension-hold mode
@@ -44,6 +48,8 @@ var DefaultConfig = Config{
 
 	HomingRPM:       25,
 	HomingTorquePct: 18,
+
+	AccelMmPerSec2: 1000,
 
 	TorqueSafetyPct: 75,
 

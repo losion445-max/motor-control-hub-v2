@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/losion445-max/motor-control-hub-v2/pkg/motion"
 	"github.com/losion445-max/motor-control-hub-v2/pkg/t3d"
 )
 
@@ -256,7 +257,10 @@ func (s *System) Position() (x, y float64) { return s.posX, s.posY }
 
 // movePulses executes a synchronised multi-motor move.
 //
-// Phase 1 — proportional full speed until the leading motor enters its approach zone.
+// Phase 1 — proportional full speed, with trapezoidal accel/decel via P-060/P-061
+// (set from Config.AccelMmPerSec2). The leading motor's approach zone is computed
+// from the motion profile's deceleration distance instead of a heuristic.
+//
 // Phase 2 — collective slowdown to multiApproachRPM (proportional), each motor
 // stops independently when within multiTolerance pulses of its target.
 func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int, maxSpeedRPM int, finalX, finalY float64) error {
@@ -273,6 +277,38 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 			return fmt.Errorf("robot: motor %d read start: %w", i+1, err)
 		}
 		starts[i] = p
+	}
+
+	// Compute motion profile and set hardware accel/decel ramps (P-060/P-061).
+	// The profile is based on the master axis (largest displacement).
+	maxSpeedMMperSec := rpmToMMperSec(float64(maxSpeedRPM), s.cfg.DrumRadiusMM)
+	var prof motion.TrapProfile
+	if s.cfg.AccelMmPerSec2 > 0 {
+		// Longest cable travel for this move (master axis).
+		var maxAbsPulses int64
+		for _, p := range pulses {
+			if p < 0 {
+				p = -p
+			}
+			if p > maxAbsPulses {
+				maxAbsPulses = p
+			}
+		}
+		masterDistMM := float64(maxAbsPulses) / pulsesPerMM(s.cfg.DrumRadiusMM)
+		prof = motion.New(masterDistMM, maxSpeedMMperSec, s.cfg.AccelMmPerSec2)
+
+		hwParam := motion.AccelToT3DParam(s.cfg.AccelMmPerSec2, s.cfg.DrumRadiusMM)
+		for i, m := range s.motors {
+			if pulses[i] == 0 {
+				continue
+			}
+			if err := m.SetAccelTime(hwParam); err != nil {
+				return fmt.Errorf("robot: motor %d set accel time: %w", i+1, err)
+			}
+			if err := m.SetDecelTime(hwParam); err != nil {
+				return fmt.Errorf("robot: motor %d set decel time: %w", i+1, err)
+			}
+		}
 	}
 
 	// Set speeds and enable all active motors.
@@ -297,10 +333,20 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 		}
 	}
 
-	// Approach zone: based on the fastest motor.
-	collectiveApproach := int64(multiApproachK * maxSpeedRPM)
+	// Approach zone: deceleration distance from the motion profile, or heuristic fallback.
+	var collectiveApproach int64
+	if prof.DecelDistMM > 0 {
+		collectiveApproach = mmToPulses(prof.DecelDistMM, s.cfg.DrumRadiusMM)
+		if collectiveApproach < 0 {
+			collectiveApproach = -collectiveApproach
+		}
+	}
 	if collectiveApproach < minApproach {
-		collectiveApproach = minApproach
+		// Fallback: heuristic (covers low-speed or zero-accel config cases).
+		collectiveApproach = int64(multiApproachK * maxSpeedRPM)
+		if collectiveApproach < minApproach {
+			collectiveApproach = minApproach
+		}
 	}
 
 	done := [4]bool{}
