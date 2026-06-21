@@ -2,18 +2,19 @@
 //
 // Usage:
 //
-//	./server -port /dev/ttyUSB0 -addr :8080
+//	./server -config config.toml
 //
-// Connects to the servo drives, starts broadcasting motor status every 200 ms,
-// and serves a WebSocket endpoint at /ws for robot control.
-// Ctrl-C triggers a graceful shutdown: the current operation is cancelled and
-// all motors are disabled before the process exits.
+// Reads the TOML config file, connects to the servo drives, starts
+// broadcasting motor status, and serves a WebSocket endpoint at /ws.
+// Ctrl-C triggers a graceful shutdown: the current operation is cancelled
+// and all motors are disabled before the process exits.
 package main
 
 import (
 	"context"
 	"flag"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,55 +22,133 @@ import (
 	"time"
 
 	"github.com/losion445-max/motor-control-hub-v2/pkg/api"
+	appcfg "github.com/losion445-max/motor-control-hub-v2/pkg/config"
 	"github.com/losion445-max/motor-control-hub-v2/pkg/robot"
 	"github.com/losion445-max/motor-control-hub-v2/pkg/runner"
 	"github.com/losion445-max/motor-control-hub-v2/pkg/usecase"
 )
 
 func main() {
-	serialPort := flag.String("port", "/dev/ttyUSB0", "RS-485 serial port")
-	listenAddr := flag.String("addr", ":8080", "HTTP listen address")
+	configPath := flag.String("config", "config.toml", "path to TOML config file")
 	flag.Parse()
 
-	// ── Robot ──────────────────────────────────────────────────────────────────
-	cfg := robot.DefaultConfig
-	sys := robot.NewSystem(*serialPort, 19200, cfg)
+	// ── Load config ───────────────────────────────────────────────────────────
+	cfg, err := appcfg.Load(*configPath)
+	if err != nil {
+		log.Fatalf("config: %v", err)
+	}
+
+	// ── Structured logging ────────────────────────────────────────────────────
+	initLogger(cfg.Server.LogFormat, cfg.Server.LogLevel)
+	slog.Info("config loaded", "path", *configPath)
+
+	// ── Robot ─────────────────────────────────────────────────────────────────
+	robotCfg := robotConfig(cfg)
+	sys := robot.NewSystem(cfg.Server.SerialPort, cfg.Server.BaudRate, robotCfg)
 	if err := sys.Connect(); err != nil {
-		log.Fatalf("serial connect: %v", err)
+		slog.Error("serial connect failed", "port", cfg.Server.SerialPort, "err", err)
+		os.Exit(1)
 	}
 	defer sys.Close()
-	log.Printf("connected to drives on %s", *serialPort)
+	slog.Info("drives connected", "port", cfg.Server.SerialPort, "baud", cfg.Server.BaudRate)
 
-	// ── Orchestrator ───────────────────────────────────────────────────────────
+	// ── Orchestrator ──────────────────────────────────────────────────────────
 	orch := usecase.New(sys)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Poll all four motors every 200 ms and push to subscribers.
-	go orch.RunStatusBroadcast(ctx, 200*time.Millisecond)
+	interval := time.Duration(cfg.Server.StatusIntervalMs) * time.Millisecond
+	go orch.RunStatusBroadcast(ctx, interval)
 
-	// ── HTTP + WebSocket ───────────────────────────────────────────────────────
-	wsHandler := api.NewHandler(orch, runner.DefaultOpts)
-	srv := api.NewServer(*listenAddr, wsHandler)
+	// ── HTTP + WebSocket ──────────────────────────────────────────────────────
+	gcodeOpts := runner.Opts{
+		RapidMmPerSec:       cfg.Gcode.RapidMmPerSec,
+		DefaultFeedMmPerSec: cfg.Gcode.DefaultFeedMmPerSec,
+	}
+	wsHandler := api.NewHandler(orch, gcodeOpts)
+	srv := api.NewServer(cfg.Server.Addr, wsHandler)
 
 	go func() {
-		log.Printf("listening on %s  (WebSocket → /ws  health → /health)", *listenAddr)
+		slog.Info("server listening",
+			"addr", cfg.Server.Addr,
+			"ws", "/ws",
+			"health", "/health",
+		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server: %v", err)
+			slog.Error("server error", "err", err)
+			os.Exit(1)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("shutting down…")
+	slog.Info("shutting down")
 
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := api.Shutdown(shutCtx, srv); err != nil {
-		log.Printf("shutdown: %v", err)
+		slog.Warn("http shutdown", "err", err)
 	}
 	if err := sys.EmergencyStop(); err != nil {
-		log.Printf("emergency stop: %v", err)
+		slog.Warn("emergency stop", "err", err)
 	}
-	log.Println("done")
+	slog.Info("done")
+}
+
+// initLogger configures the global slog logger.
+func initLogger(format, level string) {
+	var lvl slog.Level
+	switch level {
+	case "debug":
+		lvl = slog.LevelDebug
+	case "warn":
+		lvl = slog.LevelWarn
+	case "error":
+		lvl = slog.LevelError
+	default:
+		lvl = slog.LevelInfo
+	}
+
+	opts := &slog.HandlerOptions{Level: lvl}
+	var handler slog.Handler
+	if format == "json" {
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	} else {
+		handler = slog.NewTextHandler(os.Stderr, opts)
+	}
+	slog.SetDefault(slog.New(handler))
+}
+
+// robotConfig maps the loaded app config into robot.Config.
+func robotConfig(cfg *appcfg.Config) robot.Config {
+	return robot.Config{
+		WidthMM:      cfg.Hardware.WidthMM,
+		HeightMM:     cfg.Hardware.HeightMM,
+		DrumRadiusMM: cfg.Hardware.DrumRadiusMM,
+
+		HomingRPM:       cfg.Homing.RPM,
+		HomingTorquePct: cfg.Homing.TorquePct,
+
+		TorqueSafetyPct: cfg.Safety.TorquePct,
+
+		HoldTensionPct: cfg.Hold.TorquePct,
+		HoldTensionRPM: cfg.Hold.RPM,
+
+		AccelMmPerSec2: cfg.Move.AccelMmPerSec2,
+
+		ApproachRPM:       cfg.Move.ApproachRPM,
+		ApproachFactor:    cfg.Move.ApproachFactor,
+		MinApproachPulses: int64(cfg.Move.MinApproachPulses),
+		TolerancePulses:   int64(cfg.Move.TolerancePulses),
+		PollInterval:      time.Duration(cfg.Move.PollMs) * time.Millisecond,
+		StopSettle:        time.Duration(cfg.Move.StopSettleMs) * time.Millisecond,
+		DisableWait:       time.Duration(cfg.Move.DisableWaitMs) * time.Millisecond,
+		ApproachSwitch:    time.Duration(cfg.Move.ApproachSwitchMs) * time.Millisecond,
+
+		LineTickDT:     time.Duration(cfg.Line.TickMs) * time.Millisecond,
+		LineCorrGain:   cfg.Line.CorrectionGain,
+		LineFaultEvery: cfg.Line.FaultCheckEvery,
+		LineSettleTol:  int32(cfg.Line.SettleTolPulses),
+		LineSettleLim:  time.Duration(cfg.Line.SettleTimeoutS*1000) * time.Millisecond,
+	}
 }

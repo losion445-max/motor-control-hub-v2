@@ -10,13 +10,6 @@ import (
 	"github.com/losion445-max/motor-control-hub-v2/pkg/t3d"
 )
 
-const (
-	lineDT         = 100 * time.Millisecond // closed-loop control period
-	lineCorrGain   = 3.0                    // cable correction: (mm/s) per mm of cable-length error
-	lineFaultEvery = 20                     // check drive fault codes every N control ticks (~2 s)
-	lineSettleTol  = 50                     // pulses: acceptable final-position error (~2 mm)
-	lineSettleLim  = 3 * time.Second        // max wait for final settle phase
-)
 
 // LineTo moves the camera in a straight Cartesian line to (x1, y1) at
 // speedMmPerSec using a continuous closed-loop velocity controller.
@@ -85,7 +78,7 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 	}
 
 	circMM := 2 * math.Pi * s.cfg.DrumRadiusMM
-	dtSec := lineDT.Seconds()
+	dtSec := s.cfg.LineTickDT.Seconds()
 	ppm := pulsesPerMM(s.cfg.DrumRadiusMM)
 
 	// Allow 50 % speed headroom above commanded speed for the correction term.
@@ -128,8 +121,8 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 			return fmt.Errorf("robot: LineTo read pos: %w", err)
 		}
 
-		// Periodic fault check (every lineFaultEvery ticks ≈ every 2 s).
-		if iter%lineFaultEvery == 0 {
+		// Periodic fault check.
+		if iter%s.cfg.LineFaultEvery == 0 {
 			for j, m := range s.motors {
 				f, ferr := m.ReadFault()
 				if ferr != nil {
@@ -153,12 +146,12 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 			finalLens := cableLengths(x1, y1, s.cfg.WidthMM, s.cfg.HeightMM)
 			converged := true
 			for i := range 4 {
-				if int64(math.Abs(finalLens[i]-actual[i])*ppm) > lineSettleTol {
+				if int64(math.Abs(finalLens[i]-actual[i])*ppm) > int64(s.cfg.LineSettleTol) {
 					converged = false
 					break
 				}
 			}
-			if converged || time.Since(settleStart) > lineSettleLim {
+			if converged || time.Since(settleStart) > s.cfg.LineSettleLim {
 				break
 			}
 		}
@@ -169,7 +162,7 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 			// Positive = cable getting longer = motor must pay out = negative RPM.
 			ffSpeed := (desiredNext[i] - desiredNow[i]) / dtSec
 			// Proportional correction: pulls actual cable length toward desired.
-			corrSpeed := lineCorrGain * (desiredNow[i] - actual[i])
+			corrSpeed := s.cfg.LineCorrGain * (desiredNow[i] - actual[i])
 
 			rpmFloat := -(ffSpeed + corrSpeed) / circMM * 60
 			rpm := int16(math.Round(rpmFloat))
@@ -186,7 +179,7 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 		}
 
 		// Sleep for the remainder of the control period.
-		if rem := lineDT - time.Since(loopStart); rem > 0 {
+		if rem := s.cfg.LineTickDT - time.Since(loopStart); rem > 0 {
 			time.Sleep(rem)
 		}
 	}
@@ -194,7 +187,7 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 	for _, m := range s.motors {
 		_ = m.Disable()
 	}
-	time.Sleep(multiStopSettle)
+	time.Sleep(s.cfg.StopSettle)
 	s.posX, s.posY = x1, y1
 	return nil
 }

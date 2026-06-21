@@ -1,0 +1,70 @@
+# motor-control-hub-v2 — system configuration
+#
+# This file is the single source of truth for all hardware parameters,
+# motion tuning values, and server settings. Commit it to git.
+# The server loads it at startup: ./server -config config.toml
+
+# ── Server / application ───────────────────────────────────────────────────────
+
+[server]
+addr              = ":8080"          # HTTP listen address
+serial_port       = "/dev/ttyUSB0"  # RS-485 device
+baud_rate         = 19200            # must match drive P-179
+status_interval_ms = 200             # motor poll → WebSocket broadcast interval
+log_format        = "text"           # "text" (dev) | "json" (prod)
+log_level         = "info"           # "debug" | "info" | "warn" | "error"
+
+# ── Physical hardware ─────────────────────────────────────────────────────────
+#
+# Motor layout (top-left origin):
+#   M1(0,0) ─────────── M2(W,0)
+#     │                      │
+#     │       [camera]       │
+#     │                      │
+#   M4(0,H) ─────────── M3(W,H)
+
+[hardware]
+width_mm       = 1400.0   # horizontal M1→M2 distance
+height_mm      = 2400.0   # vertical M1→M4 distance
+drum_radius_mm = 67.8     # effective cable drum radius (mid-cable)
+
+[homing]
+rpm        = 25   # winding speed during calibration
+torque_pct = 18   # torque % that signals cable is taut
+
+[safety]
+torque_pct = 75   # emergency-stop threshold (% of rated torque)
+
+[hold_tension]
+torque_pct = 30   # cable tension-hold torque cap (P-069)
+rpm        = 20   # slow winding speed for tension maintenance
+
+# ── Motion controllers ────────────────────────────────────────────────────────
+
+[move]
+# MoveTo — stop-and-go trapezoidal controller
+# All timing values are in milliseconds.
+
+accel_mm_per_sec2   = 1000.0  # trapezoidal accel/decel ramp (0 = use drive default)
+approach_rpm        = 30      # final approach speed (RPM) for all motors
+approach_factor     = 5       # approach zone = max(factor × maxRPM, min_approach) pulses
+min_approach_pulses = 50      # floor for approach zone (~2 mm); prevents collapse on short moves
+tolerance_pulses    = 50      # stop when remaining ≤ this (~2 mm)
+poll_ms             = 15      # how often motor positions are read during a move
+stop_settle_ms      = 150     # settle time after all motors have stopped
+disable_wait_ms     = 80      # wait after disable before reading start positions
+approach_switch_ms  = 30      # wait between collective disable and re-enable at approach speed
+
+[line]
+# LineTo — continuous closed-loop velocity controller
+# Motor speeds are set every tick; no per-step stops.
+
+tick_ms           = 100   # control loop period
+correction_gain   = 3.0   # proportional cable-error gain: (mm/s) per mm of cable-length error
+fault_check_every = 20    # read fault registers every N ticks (~2 s at 100 ms tick)
+settle_tol_pulses = 50    # final settle: done when all cable errors < this (~2 mm)
+settle_timeout_s  = 3.0   # max wait in settle phase before giving up
+
+[gcode]
+rapid_mm_per_sec        = 200.0  # speed for G0 (rapid) moves
+default_feed_mm_per_sec = 20.0   # feed rate before any F word in the program

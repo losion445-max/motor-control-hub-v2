@@ -10,18 +10,6 @@ import (
 	"github.com/losion445-max/motor-control-hub-v2/pkg/t3d"
 )
 
-// multi-motor move tuning
-const (
-	multiApproachRPM = 30 // final approach speed for all motors (RPM)
-	multiTolerance   = 50 // stop when remaining ≤ this (pulses, ~2 mm at r=67.8)
-	multiApproachK   = 5  // approach zone = K × motorSpeedRPM (pulses)
-	minApproach      = 50 // floor for approach zone (pulses, ~2 mm); keeps it sane for short LineTo steps
-
-	multiPollInterval = 15 * time.Millisecond
-	multiStopSettle   = 150 * time.Millisecond
-	multiDisableWait  = 80 * time.Millisecond
-	approachSwitchMs  = 30 * time.Millisecond // wait after per-motor disable during approach
-)
 
 // MotorState is a snapshot returned by ReadAllStatus.
 type MotorState struct {
@@ -271,7 +259,7 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 	for _, m := range s.motors {
 		_ = m.Disable()
 	}
-	time.Sleep(multiDisableWait)
+	time.Sleep(s.cfg.DisableWait)
 
 	var starts [4]int32
 	for i, m := range s.motors {
@@ -344,9 +332,9 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 			collectiveApproach = -collectiveApproach
 		}
 	}
-	if collectiveApproach < minApproach {
+	if collectiveApproach < s.cfg.MinApproachPulses {
 		// Fallback: heuristic (covers low-speed or zero-accel config cases).
-		collectiveApproach = max(int64(multiApproachK*maxSpeedRPM), minApproach)
+		collectiveApproach = max(int64(s.cfg.ApproachFactor*maxSpeedRPM), s.cfg.MinApproachPulses)
 	}
 
 	done := [4]bool{}
@@ -409,7 +397,7 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 				}
 			}
 
-			if remaining <= multiTolerance {
+			if remaining <= s.cfg.TolerancePulses {
 				_ = m.Disable()
 				done[i] = true
 			}
@@ -418,10 +406,10 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 		if allDone {
 			break
 		}
-		time.Sleep(multiPollInterval)
+		time.Sleep(s.cfg.PollInterval)
 	}
 
-	time.Sleep(multiStopSettle)
+	time.Sleep(s.cfg.StopSettle)
 	s.posX, s.posY = finalX, finalY
 	return nil
 }
@@ -435,16 +423,16 @@ func (s *System) collectiveSlowdown(done [4]bool, pulses [4]int64, speeds [4]int
 		}
 		_ = m.Disable()
 	}
-	time.Sleep(approachSwitchMs)
+	time.Sleep(s.cfg.ApproachSwitch)
 
 	for i, m := range s.motors {
 		if done[i] || pulses[i] == 0 {
 			continue
 		}
-		// Proportional approach speed: same ratio as full-speed, scaled to multiApproachRPM.
-		approachRPM := multiApproachRPM
+		// Proportional approach speed: same ratio as full-speed, scaled to ApproachRPM.
+		approachRPM := s.cfg.ApproachRPM
 		if speeds[i] > 0 && maxSpeedRPM > 0 {
-			approachRPM = multiApproachRPM * speeds[i] / maxSpeedRPM
+			approachRPM = s.cfg.ApproachRPM * speeds[i] / maxSpeedRPM
 		}
 		// Never exceed the commanded speed — at low G1 feedrates multiApproachRPM
 		// can be higher than speeds[i], which would accelerate instead of slow down.

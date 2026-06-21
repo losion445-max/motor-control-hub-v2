@@ -27,7 +27,7 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -74,7 +74,7 @@ func NewHandler(orch *usecase.Orchestrator, opts runner.Opts) *Handler {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("ws upgrade: %v", err)
+		slog.Warn("ws upgrade failed", "err", err)
 		return
 	}
 	defer conn.Close()
