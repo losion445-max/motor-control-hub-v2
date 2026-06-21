@@ -253,6 +253,9 @@ func (s *System) ReadAllStatus() [4]MotorState {
 // Only valid after a successful Home call.
 func (s *System) Position() (x, y float64) { return s.posX, s.posY }
 
+// Homed reports whether Home has completed successfully at least once.
+func (s *System) Homed() bool { return s.homed }
+
 // ── Internal ──────────────────────────────────────────────────────────────────
 
 // movePulses executes a synchronised multi-motor move.
