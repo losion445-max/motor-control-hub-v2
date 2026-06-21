@@ -4,54 +4,197 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
+
+	"github.com/losion445-max/motor-control-hub-v2/pkg/motion"
+	"github.com/losion445-max/motor-control-hub-v2/pkg/t3d"
 )
 
-// LineTo moves the camera in a straight line from its current position to
-// (x, y) at the given speed (mm/s).
+const (
+	lineDT         = 100 * time.Millisecond // closed-loop control period
+	lineCorrGain   = 3.0                    // cable correction: (mm/s) per mm of cable-length error
+	lineFaultEvery = 20                     // check drive fault codes every N control ticks (~2 s)
+	lineSettleTol  = 50                     // pulses: acceptable final-position error (~2 mm)
+	lineSettleLim  = 3 * time.Second        // max wait for final settle phase
+)
+
+// LineTo moves the camera in a straight Cartesian line to (x1, y1) at
+// speedMmPerSec using a continuous closed-loop velocity controller.
 //
-// The path is subdivided into waypoints spaced Config.InterpStepMM apart.
-// At each waypoint the inverse kinematics are recomputed, so the camera
-// follows a straight line in Cartesian space rather than the curved arc that
-// a single proportional-cable move would produce.
+// # How it works
 //
-// Returns when the camera has reached (x, y). Cancelling ctx stops all motors.
-func (s *System) LineTo(ctx context.Context, x, y, speedMmPerSec float64) error {
+// At each 100 ms tick the controller:
+//  1. Reads actual cable lengths from the 4 absolute encoders.
+//  2. Computes desired cable lengths at the ideal path position for this tick
+//     and one tick ahead (using a trapezoidal velocity profile).
+//  3. Derives a feed-forward motor speed = (desiredNext − desiredNow) / dt,
+//     which is the exact cable speed required for the commanded Cartesian velocity.
+//  4. Adds a proportional correction for accumulated error:
+//     corrSpeed = lineCorrGain × (desired − actual) in mm/s cable space.
+//  5. Converts the combined cable speed to RPM and writes it to each drive.
+//
+// Motors run continuously for the duration of the move — no stop-start between
+// waypoints — so motion is smooth and the effective speed equals the commanded
+// speed minus only the control-loop overhead (~10 %).
+//
+// The overall speed profile is trapezoidal (accel → cruise → decel) using
+// Config.AccelMmPerSec2.  The same ramp is programmed into the drive hardware
+// via P-060 / P-061 to smooth out the speed-command steps between ticks.
+//
+// Sign convention: positive motor RPM = wind in = cable shorter.
+// A cable getting longer requires negative RPM (pay-out direction).
+func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) error {
 	if !s.homed {
 		return fmt.Errorf("robot: LineTo called before Home")
 	}
 
-	startX, startY := s.posX, s.posY
-	dx, dy := x-startX, y-startY
+	x0, y0 := s.posX, s.posY
+	dx, dy := x1-x0, y1-y0
 	dist := math.Sqrt(dx*dx + dy*dy)
-
 	if dist < 0.5 {
+		s.posX, s.posY = x1, y1
 		return nil
 	}
 
-	step := s.cfg.InterpStepMM
-	if step <= 0 {
-		step = 25
+	accel := s.cfg.AccelMmPerSec2
+	if accel <= 0 {
+		accel = DefaultConfig.AccelMmPerSec2
+	}
+	prof := motion.New(dist, speedMmPerSec, accel)
+
+	// Program hardware accel/decel ramps (P-060 / P-061) so the drive
+	// smooths out the speed-command steps between control ticks.
+	hwParam := motion.AccelToT3DParam(accel, s.cfg.DrumRadiusMM)
+	for i, m := range s.motors {
+		if err := m.SetAccelTime(hwParam); err != nil {
+			return fmt.Errorf("robot: motor %d set accel: %w", i+1, err)
+		}
+		if err := m.SetDecelTime(hwParam); err != nil {
+			return fmt.Errorf("robot: motor %d set decel: %w", i+1, err)
+		}
 	}
 
-	n := int(math.Ceil(dist / step))
-	if n < 1 {
-		n = 1
+	// Enable all motors at zero speed; feed-forward ramps them up.
+	for i, m := range s.motors {
+		if err := m.WriteParam(t3d.ParamInternalSpd1, 0); err != nil {
+			return fmt.Errorf("robot: motor %d init: %w", i+1, err)
+		}
+		if err := m.Enable(); err != nil {
+			return fmt.Errorf("robot: motor %d enable: %w", i+1, err)
+		}
 	}
 
-	for i := 1; i <= n; i++ {
+	circMM := 2 * math.Pi * s.cfg.DrumRadiusMM
+	dtSec := lineDT.Seconds()
+	ppm := pulsesPerMM(s.cfg.DrumRadiusMM)
+
+	// Allow 50 % speed headroom above commanded speed for the correction term.
+	capRPM := max(int16(mmPerSecToRPM(speedMmPerSec, s.cfg.DrumRadiusMM))*3/2, 10)
+
+	start := time.Now()
+	var settleStart time.Time
+	inSettle := false
+	iter := 0
+
+	for {
+		loopStart := time.Now()
+		iter++
+
 		select {
 		case <-ctx.Done():
+			_ = s.EmergencyStop()
 			return ctx.Err()
 		default:
 		}
 
-		t := float64(i) / float64(n)
-		wx := startX + t*dx
-		wy := startY + t*dy
+		elapsed := time.Since(start).Seconds()
+		profileDone := elapsed >= prof.Total
 
-		if err := s.MoveTo(ctx, wx, wy, speedMmPerSec); err != nil {
-			return fmt.Errorf("robot: LineTo step %d/%d: %w", i, n, err)
+		// Ideal Cartesian position now and one tick ahead (feed-forward derivative).
+		posNow := prof.PositionAt(elapsed)
+		posNext := prof.PositionAt(elapsed + dtSec)
+		txNow := x0 + (posNow/dist)*dx
+		tyNow := y0 + (posNow/dist)*dy
+		txNext := x0 + (posNext/dist)*dx
+		tyNext := y0 + (posNext/dist)*dy
+
+		desiredNow := cableLengths(txNow, tyNow, s.cfg.WidthMM, s.cfg.HeightMM)
+		desiredNext := cableLengths(txNext, tyNext, s.cfg.WidthMM, s.cfg.HeightMM)
+
+		// Read actual cable lengths from the absolute encoders.
+		actual, err := s.currentCableLengths()
+		if err != nil {
+			_ = s.EmergencyStop()
+			return fmt.Errorf("robot: LineTo read pos: %w", err)
+		}
+
+		// Periodic fault check (every lineFaultEvery ticks ≈ every 2 s).
+		if iter%lineFaultEvery == 0 {
+			for j, m := range s.motors {
+				f, ferr := m.ReadFault()
+				if ferr != nil {
+					_ = s.EmergencyStop()
+					return fmt.Errorf("robot: motor %d fault read: %w", j+1, ferr)
+				}
+				if f != 0 {
+					_ = s.EmergencyStop()
+					return fmt.Errorf("robot: motor %d fault %d", j+1, f)
+				}
+			}
+		}
+
+		// Settle phase: after the velocity profile ends, run pure correction
+		// until all cables converge within lineSettleTol pulses of the target.
+		if profileDone {
+			if !inSettle {
+				inSettle = true
+				settleStart = time.Now()
+			}
+			finalLens := cableLengths(x1, y1, s.cfg.WidthMM, s.cfg.HeightMM)
+			converged := true
+			for i := range 4 {
+				if int64(math.Abs(finalLens[i]-actual[i])*ppm) > lineSettleTol {
+					converged = false
+					break
+				}
+			}
+			if converged || time.Since(settleStart) > lineSettleLim {
+				break
+			}
+		}
+
+		// Compute and apply motor speeds.
+		for i, m := range s.motors {
+			// Feed-forward: derivative of desired cable length (mm/s).
+			// Positive = cable getting longer = motor must pay out = negative RPM.
+			ffSpeed := (desiredNext[i] - desiredNow[i]) / dtSec
+			// Proportional correction: pulls actual cable length toward desired.
+			corrSpeed := lineCorrGain * (desiredNow[i] - actual[i])
+
+			rpmFloat := -(ffSpeed + corrSpeed) / circMM * 60
+			rpm := int16(math.Round(rpmFloat))
+			if rpm > capRPM {
+				rpm = capRPM
+			} else if rpm < -capRPM {
+				rpm = -capRPM
+			}
+
+			if err := m.WriteParam(t3d.ParamInternalSpd1, uint16(rpm)); err != nil {
+				_ = s.EmergencyStop()
+				return fmt.Errorf("robot: motor %d speed: %w", i+1, err)
+			}
+		}
+
+		// Sleep for the remainder of the control period.
+		if rem := lineDT - time.Since(loopStart); rem > 0 {
+			time.Sleep(rem)
 		}
 	}
+
+	for _, m := range s.motors {
+		_ = m.Disable()
+	}
+	time.Sleep(multiStopSettle)
+	s.posX, s.posY = x1, y1
 	return nil
 }
