@@ -11,6 +11,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -201,17 +202,21 @@ func (o *Orchestrator) Calibrate(ctx context.Context, out chan<- Event) {
 	defer cancel()
 
 	if !o.acquire(cancel) {
+		slog.Warn("calibrate rejected: robot busy")
 		out <- Event{Kind: KindError, Message: "robot busy"}
 		return
 	}
 	defer o.release()
 
+	slog.Info("calibrate started")
 	out <- Event{Kind: KindProgress, Message: "homing: tensioning all cables…"}
 	if err := o.robot.Home(opCtx); err != nil {
+		slog.Warn("calibrate failed", "err", err)
 		out <- Event{Kind: KindError, Message: err.Error()}
 		return
 	}
 	x, y := o.robot.Position()
+	slog.Info("calibrate done", "x", x, "y", y)
 	out <- Event{Kind: KindDone, Message: fmt.Sprintf("homed — position declared (%.0f, %.0f)", x, y)}
 }
 
@@ -221,16 +226,20 @@ func (o *Orchestrator) Move(ctx context.Context, x, y, speed float64, out chan<-
 	defer cancel()
 
 	if !o.acquire(cancel) {
+		slog.Warn("move rejected: robot busy", "x", x, "y", y)
 		out <- Event{Kind: KindError, Message: "robot busy"}
 		return
 	}
 	defer o.release()
 
+	slog.Info("move started", "x", x, "y", y, "speed_mm_s", speed)
 	out <- Event{Kind: KindProgress, Message: fmt.Sprintf("rapid move → (%.0f, %.0f)", x, y)}
 	if err := o.robot.MoveTo(opCtx, x, y, speed); err != nil {
+		slog.Warn("move failed", "x", x, "y", y, "err", err)
 		out <- Event{Kind: KindError, Message: err.Error()}
 		return
 	}
+	slog.Info("move done", "x", x, "y", y)
 	out <- Event{Kind: KindDone, Message: fmt.Sprintf("arrived (%.0f, %.0f)", x, y)}
 }
 
@@ -240,16 +249,20 @@ func (o *Orchestrator) Line(ctx context.Context, x, y, speed float64, out chan<-
 	defer cancel()
 
 	if !o.acquire(cancel) {
+		slog.Warn("line rejected: robot busy", "x", x, "y", y)
 		out <- Event{Kind: KindError, Message: "robot busy"}
 		return
 	}
 	defer o.release()
 
+	slog.Info("line started", "x", x, "y", y, "speed_mm_s", speed)
 	out <- Event{Kind: KindProgress, Message: fmt.Sprintf("line → (%.0f, %.0f) at %.0f mm/s", x, y, speed)}
 	if err := o.robot.LineTo(opCtx, x, y, speed); err != nil {
+		slog.Warn("line failed", "x", x, "y", y, "err", err)
 		out <- Event{Kind: KindError, Message: err.Error()}
 		return
 	}
+	slog.Info("line done", "x", x, "y", y)
 	out <- Event{Kind: KindDone, Message: fmt.Sprintf("arrived (%.0f, %.0f)", x, y)}
 }
 
@@ -261,23 +274,28 @@ func (o *Orchestrator) RunGcode(ctx context.Context, src string, opts runner.Opt
 
 	cmds, err := gcode.Parse(src)
 	if err != nil {
+		slog.Warn("gcode parse error", "err", err)
 		out <- Event{Kind: KindError, Message: "gcode parse: " + err.Error()}
 		return
 	}
 
 	if !o.acquire(cancel) {
+		slog.Warn("gcode rejected: robot busy", "commands", len(cmds))
 		out <- Event{Kind: KindError, Message: "robot busy"}
 		return
 	}
 	defer o.release()
 
+	slog.Info("gcode started", "commands", len(cmds))
 	out <- Event{Kind: KindProgress, Message: fmt.Sprintf("running %d commands", len(cmds))}
 
 	if err := runner.Run(opCtx, o.robot, cmds, opts); err != nil {
+		slog.Warn("gcode failed", "err", err)
 		out <- Event{Kind: KindError, Message: err.Error()}
 		return
 	}
 	x, y := o.robot.Position()
+	slog.Info("gcode done", "x", x, "y", y)
 	out <- Event{Kind: KindDone, Message: fmt.Sprintf("program complete — position (%.0f, %.0f)", x, y)}
 }
 
@@ -288,12 +306,19 @@ func (o *Orchestrator) Stop() error {
 		o.cancelOp()
 	}
 	o.mu.Unlock()
+	slog.Info("stop: emergency stop requested")
 	return o.robot.EmergencyStop()
 }
 
 // HoldTension enables passive cable tension on all motors.
 func (o *Orchestrator) HoldTension() error {
-	return o.robot.HoldTension()
+	slog.Info("hold tension started")
+	if err := o.robot.HoldTension(); err != nil {
+		slog.Warn("hold tension failed", "err", err)
+		return err
+	}
+	slog.Info("hold tension active")
+	return nil
 }
 
 // Status returns a one-shot system status snapshot.

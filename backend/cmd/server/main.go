@@ -125,6 +125,7 @@ func robotConfig(cfg *appcfg.Config) robot.Config {
 		WidthMM:      cfg.Hardware.WidthMM,
 		HeightMM:     cfg.Hardware.HeightMM,
 		DrumRadiusMM: cfg.Hardware.DrumRadiusMM,
+		PulsesPerRev: cfg.Hardware.PulsesPerRev,
 
 		HomingRPM:       cfg.Homing.RPM,
 		HomingTorquePct: cfg.Homing.TorquePct,

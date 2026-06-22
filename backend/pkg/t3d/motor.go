@@ -35,7 +35,7 @@ const (
 //	m1 := t3d.NewMotor(bus, 1)
 //	m2 := t3d.NewMotor(bus, 2)
 type Motor struct {
-	bus     *Bus
+	bus     busTransport // *Bus in production; mockBus in tests
 	slaveID byte
 }
 

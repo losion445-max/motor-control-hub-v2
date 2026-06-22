@@ -28,6 +28,7 @@ type Config struct {
 	WidthMM      float64 // W: horizontal distance M1→M2 (mm)
 	HeightMM     float64 // H: vertical distance M1→M4 (mm)
 	DrumRadiusMM float64 // effective cable drum radius at mid-cable (mm)
+	PulsesPerRev int     // encoder PPR (10000 for 80AST-A1C04025: 2500-line × 4)
 
 	// ── Homing ────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ var DefaultConfig = Config{
 	WidthMM:      1400,
 	HeightMM:     2400,
 	DrumRadiusMM: 67.8,
+	PulsesPerRev: 10000,
 
 	HomingRPM:       25,
 	HomingTorquePct: 18,

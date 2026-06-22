@@ -24,9 +24,10 @@ log_level         = "info"           # "debug" | "info" | "warn" | "error"
 #   M4(0,H) ─────────── M3(W,H)
 
 [hardware]
-width_mm       = 1400.0   # horizontal M1→M2 distance
-height_mm      = 2400.0   # vertical M1→M4 distance
-drum_radius_mm = 67.8     # effective cable drum radius (mid-cable)
+width_mm        = 1400.0  # horizontal M1→M2 distance
+height_mm       = 2400.0  # vertical M1→M4 distance
+drum_radius_mm  = 67.8    # effective cable drum radius (mid-cable)
+pulses_per_rev  = 10000   # encoder PPR: 80AST-A1C04025 has 2500-line encoder × 4
 
 [homing]
 rpm        = 25   # winding speed during calibration

@@ -8,6 +8,13 @@ import (
 	"github.com/goburrow/modbus"
 )
 
+// busTransport abstracts RS-485 bus operations so Motor can be tested without
+// a real serial port. *Bus is the production implementation.
+type busTransport interface {
+	tx(slaveID byte, fn func(modbus.Client) error) error
+	txRaw(slaveID, fc byte, data []byte) ([]byte, error)
+}
+
 // Bus owns a single RS-485 serial port shared by all motors on the network.
 // Create one Bus per port; then create Motor instances that reference it.
 // All motor operations serialize through Bus.mu — only one Modbus frame is

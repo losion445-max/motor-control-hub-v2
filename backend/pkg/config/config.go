@@ -62,8 +62,13 @@ type HardwareConfig struct {
 	HeightMM float64 `toml:"height_mm"`
 
 	// DrumRadiusMM is the effective cable drum radius at the midline of the
-	// cable (mm). Determines mm↔pulse conversion and RPM↔mm/s conversion.
+	// cable (mm). Determines RPM↔mm/s conversion.
 	DrumRadiusMM float64 `toml:"drum_radius_mm"`
+
+	// PulsesPerRev is the encoder resolution in pulses per revolution.
+	// 80AST-A1C04025: 2500-line encoder × 4 = 10000 PPR.
+	// Together with DrumRadiusMM this determines the mm↔pulse conversion.
+	PulsesPerRev int `toml:"pulses_per_rev"`
 }
 
 // HomingConfig contains parameters for the homing (calibration) sequence.

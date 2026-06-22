@@ -81,7 +81,7 @@ func TestHomeLength(t *testing.T) {
 // ── pulsesPerMM ───────────────────────────────────────────────────────────────
 
 func TestPulsesPerMM(t *testing.T) {
-	got := pulsesPerMM(r)
+	got := pulsesPerMM(r, 10000)
 	// 10000 / (2π × 67.8) ≈ 23.47 pulses/mm
 	want := 10000.0 / (2 * math.Pi * r)
 	if math.Abs(got-want) > 0.001 {
@@ -96,29 +96,29 @@ func TestPulsesPerMM(t *testing.T) {
 
 func TestMmToPulses(t *testing.T) {
 	t.Run("zero distance", func(t *testing.T) {
-		if p := mmToPulses(0, r); p != 0 {
+		if p := mmToPulses(0, r, 10000); p != 0 {
 			t.Errorf("mmToPulses(0) = %d, want 0", p)
 		}
 	})
 	t.Run("one pulse round-trip", func(t *testing.T) {
-		oneMM := 1.0 / pulsesPerMM(r)
-		if p := mmToPulses(oneMM, r); p != 1 {
+		oneMM := 1.0 / pulsesPerMM(r, 10000)
+		if p := mmToPulses(oneMM, r, 10000); p != 1 {
 			t.Errorf("mmToPulses(1 pulse in mm) = %d, want 1", p)
 		}
 	})
 	t.Run("negative distance gives negative pulses", func(t *testing.T) {
-		if p := mmToPulses(-10, r); p >= 0 {
+		if p := mmToPulses(-10, r, 10000); p >= 0 {
 			t.Errorf("mmToPulses(-10) = %d, expected negative", p)
 		}
 	})
 	t.Run("positive distance gives positive pulses", func(t *testing.T) {
-		if p := mmToPulses(10, r); p <= 0 {
+		if p := mmToPulses(10, r, 10000); p <= 0 {
 			t.Errorf("mmToPulses(10) = %d, expected positive", p)
 		}
 	})
 	t.Run("antisymmetry", func(t *testing.T) {
-		pos := mmToPulses(100, r)
-		neg := mmToPulses(-100, r)
+		pos := mmToPulses(100, r, 10000)
+		neg := mmToPulses(-100, r, 10000)
 		if pos != -neg {
 			t.Errorf("mmToPulses(100)=%d != -mmToPulses(-100)=%d", pos, neg)
 		}

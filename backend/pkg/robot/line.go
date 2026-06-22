@@ -3,6 +3,7 @@ package robot
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"time"
 
@@ -79,7 +80,7 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 
 	circMM := 2 * math.Pi * s.cfg.DrumRadiusMM
 	dtSec := s.cfg.LineTickDT.Seconds()
-	ppm := pulsesPerMM(s.cfg.DrumRadiusMM)
+	ppm := pulsesPerMM(s.cfg.DrumRadiusMM, s.cfg.PulsesPerRev)
 
 	// Allow 50 % speed headroom above commanded speed for the correction term.
 	capRPM := max(int16(mmPerSecToRPM(speedMmPerSec, s.cfg.DrumRadiusMM))*3/2, 10)
@@ -130,6 +131,7 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 					return fmt.Errorf("robot: motor %d fault read: %w", j+1, ferr)
 				}
 				if f != 0 {
+					slog.Warn("drive fault during LineTo", "motor", j+1, "fault", f)
 					_ = s.EmergencyStop()
 					return fmt.Errorf("robot: motor %d fault %d", j+1, f)
 				}

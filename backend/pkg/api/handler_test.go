@@ -410,3 +410,35 @@ func TestHandler_MultipleClients(t *testing.T) {
 		t.Errorf("client2 stop: want done, got %q", m2[len(m2)-1].Kind)
 	}
 }
+
+// ── NewServer / Shutdown / health endpoint ────────────────────────────────────
+
+func TestNewServer_HealthEndpoint(t *testing.T) {
+	h := api.NewHandler(usecase.New(&mockRobot{}), runner.Opts{})
+	srv := api.NewServer(":0", h)
+
+	ts := httptest.NewServer(srv.Handler)
+	t.Cleanup(ts.Close)
+
+	resp, err := ts.Client().Get(ts.URL + "/health")
+	if err != nil {
+		t.Fatalf("GET /health: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Errorf("/health status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestShutdown(t *testing.T) {
+	h := api.NewHandler(usecase.New(&mockRobot{}), runner.Opts{})
+	srv := api.NewServer(":0", h)
+	ts := httptest.NewServer(srv.Handler)
+	t.Cleanup(ts.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	// Shutdown on an httptest server will return an error ("Server closed") but
+	// the call itself must not panic or block.
+	_ = api.Shutdown(ctx, srv)
+}

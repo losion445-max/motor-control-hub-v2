@@ -3,6 +3,7 @@ package robot
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"time"
 
@@ -10,6 +11,23 @@ import (
 	"github.com/losion445-max/motor-control-hub-v2/pkg/t3d"
 )
 
+
+// driveMotor is the set of *t3d.Motor methods used by System.
+// Defined as an interface so System can be tested without a real RS-485 port.
+type driveMotor interface {
+	Enable() error
+	Disable() error
+	WriteParam(addr, value uint16) error
+	ReadAbsPosition() (int32, error)
+	ReadTorquePct() (int16, error)
+	ReadFault() (uint16, error)
+	ReadStatus() (*t3d.Status, error)
+	ReadMotionState() (pos int32, torque int16, fault uint16, err error)
+	SetAccelTime(msPerKRPM int) error
+	SetDecelTime(msPerKRPM int) error
+	SetSpeed(rpm int) error
+	SetTorqueLimit(pct int) error
+}
 
 // MotorState is a snapshot returned by ReadAllStatus.
 type MotorState struct {
@@ -22,7 +40,7 @@ type MotorState struct {
 // Create with NewSystem, call Connect before any motion, Close when done.
 type System struct {
 	bus    *t3d.Bus
-	motors [4]*t3d.Motor // index 0=M1, 1=M2, 2=M3, 3=M4
+	motors [4]driveMotor // index 0=M1, 1=M2, 2=M3, 3=M4; *t3d.Motor in production
 	cfg    Config
 
 	// set by Home()
@@ -123,6 +141,12 @@ func (s *System) Home(ctx context.Context) error {
 	s.posX = s.cfg.WidthMM / 2
 	s.posY = s.cfg.HeightMM / 2
 	s.homed = true
+	slog.Info("home complete",
+		"len_mm", s.homeLenMM,
+		"home_pos", s.homePos,
+		"x", s.posX,
+		"y", s.posY,
+	)
 	return nil
 }
 
@@ -154,7 +178,7 @@ func (s *System) MoveTo(ctx context.Context, x, y, speedMmPerSec float64) error 
 	var maxAbsMM float64
 	for i := range 4 {
 		deltaL := targets[i] - currLens[i]
-		deltaPulses[i] = mmToPulses(-deltaL, s.cfg.DrumRadiusMM)
+		deltaPulses[i] = mmToPulses(-deltaL, s.cfg.DrumRadiusMM, s.cfg.PulsesPerRev)
 		if absMM := math.Abs(deltaL); absMM > maxAbsMM {
 			maxAbsMM = absMM
 		}
@@ -175,7 +199,7 @@ func (s *System) MoveTo(ctx context.Context, x, y, speedMmPerSec float64) error 
 		if absPulses < 0 {
 			absPulses = -absPulses
 		}
-		maxAbsPulses := mmToPulses(maxAbsMM, s.cfg.DrumRadiusMM)
+		maxAbsPulses := mmToPulses(maxAbsMM, s.cfg.DrumRadiusMM, s.cfg.PulsesPerRev)
 		if maxAbsPulses < 0 {
 			maxAbsPulses = -maxAbsPulses
 		}
@@ -216,6 +240,7 @@ func (s *System) HoldTension() error {
 // EmergencyStop disables all 4 motors immediately. Errors are collected but
 // do not prevent the remaining motors from being stopped.
 func (s *System) EmergencyStop() error {
+	slog.Warn("emergency stop")
 	var first error
 	for _, m := range s.motors {
 		if err := m.Disable(); err != nil && first == nil {
@@ -285,7 +310,7 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 				maxAbsPulses = p
 			}
 		}
-		masterDistMM := float64(maxAbsPulses) / pulsesPerMM(s.cfg.DrumRadiusMM)
+		masterDistMM := float64(maxAbsPulses) / pulsesPerMM(s.cfg.DrumRadiusMM, s.cfg.PulsesPerRev)
 		prof = motion.New(masterDistMM, maxSpeedMMperSec, s.cfg.AccelMmPerSec2)
 
 		hwParam := motion.AccelToT3DParam(s.cfg.AccelMmPerSec2, s.cfg.DrumRadiusMM)
@@ -327,7 +352,7 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 	// Approach zone: deceleration distance from the motion profile, or heuristic fallback.
 	var collectiveApproach int64
 	if prof.DecelDistMM > 0 {
-		collectiveApproach = mmToPulses(prof.DecelDistMM, s.cfg.DrumRadiusMM)
+		collectiveApproach = mmToPulses(prof.DecelDistMM, s.cfg.DrumRadiusMM, s.cfg.PulsesPerRev)
 		if collectiveApproach < 0 {
 			collectiveApproach = -collectiveApproach
 		}
@@ -363,6 +388,7 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 				return fmt.Errorf("robot: motor %d poll: %w", i+1, err)
 			}
 			if fault != 0 {
+				slog.Warn("drive fault during move", "motor", i+1, "fault", fault)
 				_ = s.EmergencyStop()
 				return fmt.Errorf("robot: motor %d fault %d", i+1, fault)
 			}
@@ -371,6 +397,7 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 				absT = -absT
 			}
 			if int(absT) >= s.cfg.TorqueSafetyPct {
+				slog.Warn("torque safety trip", "motor", i+1, "torque_pct", torque, "limit_pct", s.cfg.TorqueSafetyPct)
 				_ = s.EmergencyStop()
 				return fmt.Errorf("robot: motor %d torque safety trip %d%%", i+1, torque)
 			}
@@ -460,7 +487,7 @@ func (s *System) collectiveSlowdown(done [4]bool, pulses [4]int64, speeds [4]int
 // Convention: positive encoder change since home = motor wound in = cable shorter.
 //   currentLen[i] = homeLenMM - (pos[i] - homePos[i]) / pulsesPerMM
 func (s *System) currentCableLengths() ([4]float64, error) {
-	ppm := pulsesPerMM(s.cfg.DrumRadiusMM)
+	ppm := pulsesPerMM(s.cfg.DrumRadiusMM, s.cfg.PulsesPerRev)
 	var lengths [4]float64
 	for i, m := range s.motors {
 		pos, err := m.ReadAbsPosition()

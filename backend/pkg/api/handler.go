@@ -74,10 +74,13 @@ func NewHandler(orch *usecase.Orchestrator, opts runner.Opts) *Handler {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		slog.Warn("ws upgrade failed", "err", err)
+		slog.Warn("ws upgrade failed", "remote", r.RemoteAddr, "err", err)
 		return
 	}
 	defer conn.Close()
+
+	slog.Info("ws client connected", "remote", r.RemoteAddr)
+	defer slog.Info("ws client disconnected", "remote", r.RemoteAddr)
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -113,6 +116,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			case msg := <-send:
 				if err := conn.WriteJSON(msg); err != nil {
+					slog.Debug("ws write error", "remote", r.RemoteAddr, "err", err)
 					cancel()
 					return
 				}
@@ -129,6 +133,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		var in inMsg
 		if err := json.Unmarshal(raw, &in); err != nil {
+			slog.Warn("ws bad json", "remote", r.RemoteAddr, "err", err)
 			select {
 			case send <- outMsg{Kind: usecase.KindError, Message: "bad json: " + err.Error()}:
 			case <-ctx.Done():
@@ -136,6 +141,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		slog.Debug("ws command", "remote", r.RemoteAddr, "cmd", in.Cmd, "id", in.ID)
 		evCh := make(chan usecase.Event, 32)
 
 		// Run the command in a goroutine; forward its events to the client.
