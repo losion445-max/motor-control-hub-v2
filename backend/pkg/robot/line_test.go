@@ -73,13 +73,13 @@ func TestLineTo_ContextCancelled(t *testing.T) {
 }
 
 func TestLineTo_Completes(t *testing.T) {
-	// Very high speed so the motion profile completes in one tick (< 1ms).
-	// ReadAbsPosition returns 0 (actual = homeLen for each cable).
-	// finalLens ≈ homeLen + small delta; |delta|*ppm < LineSettleTol(500) → converges.
+	// High speed so the motion profile completes quickly.
+	// ReadAbsPosition returns 0 (actual ≈ homeLen for each cable).
+	// finalLens ≈ homeLen + tiny delta; |delta|*ppm < LineSettleTol(500) → converges.
 	s, _ := lineTestSys()
 
 	target := s.posX + 1.0 // 1 mm move
-	if err := s.LineTo(context.Background(), target, s.posY, 10000); err != nil {
+	if err := s.LineTo(context.Background(), target, s.posY, 200); err != nil {
 		t.Fatalf("LineTo: %v", err)
 	}
 	if s.posX != target {
@@ -106,11 +106,12 @@ func TestLineTo_SettleTimeout(t *testing.T) {
 		m.absPos = 0
 	}
 
-	// Move 1 mm; profile finishes instantly (speed=10000), then settle loop runs
-	// until LineSettleLim (2ms) expires.
+	// Move 1 mm; profile finishes quickly, then settle loop runs until
+	// LineSettleLim (2ms) expires and LineTo returns a timeout error.
 	target := cfg.WidthMM/2 + 1.0
-	if err := s.LineTo(context.Background(), target, cfg.HeightMM/2, 10000); err != nil {
-		t.Fatalf("LineTo settle timeout: %v", err)
+	err := s.LineTo(context.Background(), target, cfg.HeightMM/2, 200)
+	if err == nil {
+		t.Fatal("expected settle timeout error, got nil")
 	}
 }
 

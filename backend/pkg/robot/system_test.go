@@ -40,9 +40,15 @@ func (m *mockMotor) ReadStatus() (*t3d.Status, error)                        { r
 func (m *mockMotor) ReadMotionState() (int32, int16, uint16, error) {
 	return m.absPos, m.torque, m.fault, m.motionErr
 }
-func (m *mockMotor) SetAccelTime(_ int) error  { return m.accelErr }
-func (m *mockMotor) SetDecelTime(_ int) error  { return m.decelErr }
-func (m *mockMotor) SetSpeed(_ int) error      { return m.speedErr }
+func (m *mockMotor) ReadAbsPosAndFault() (int32, uint16, error) {
+	if m.readPosErr != nil {
+		return 0, 0, m.readPosErr
+	}
+	return m.absPos, m.fault, nil
+}
+func (m *mockMotor) SetAccelTime(_ int) error   { return m.accelErr }
+func (m *mockMotor) SetDecelTime(_ int) error   { return m.decelErr }
+func (m *mockMotor) SetSpeed(_ int) error       { return m.speedErr }
 func (m *mockMotor) SetTorqueLimit(_ int) error { return m.torqLimErr }
 
 // newTestSystem builds a System with 4 identical mockMotors (no real Bus).

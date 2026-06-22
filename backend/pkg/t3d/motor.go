@@ -89,6 +89,25 @@ func (m *Motor) ReadPosition() (int32, error) {
 	return m.ReadAbsPosition()
 }
 
+// ReadAbsPosAndFault reads both the absolute encoder position and the active fault
+// code in a single FC04 transaction (registers 0x1A..0x20, 7 registers).
+// Saves one bus round-trip per motor per tick compared to separate ReadAbsPosition
+// + ReadFault calls, and enables per-tick fault detection in the control loop.
+func (m *Motor) ReadAbsPosAndFault() (pos int32, fault uint16, err error) {
+	err = m.bus.tx(m.slaveID, func(c modbus.Client) error {
+		b, e := c.ReadInputRegisters(StatusFaultCode, 7) // 0x1A..0x20
+		if e != nil {
+			return fmt.Errorf("FC04[fault+abspos]: %w", e)
+		}
+		fault = binary.BigEndian.Uint16(b[0:])
+		lo := uint32(binary.BigEndian.Uint16(b[10:]))
+		hi := uint32(binary.BigEndian.Uint16(b[12:]))
+		pos = int32(hi<<16 | lo)
+		return nil
+	})
+	return
+}
+
 // ReadTorquePct returns the current torque as a percentage of rated torque.
 // Negative values indicate reverse torque direction.
 // For 80AST: 100% ≈ 2.4 Nm.  F (N) = (pct/100 × 2.4) / radius_m.
@@ -288,7 +307,7 @@ func (m *Motor) SetSpeed(rpm int) error {
 	if err := m.Disable(); err != nil {
 		return err
 	}
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	if err := m.WriteParam(ParamInternalSpd1, uint16(int16(rpm))); err != nil {
 		return err
 	}

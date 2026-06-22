@@ -41,6 +41,9 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 	if !s.homed {
 		return fmt.Errorf("robot: LineTo called before Home")
 	}
+	if err := s.checkWorkspace(x1, y1, speedMmPerSec); err != nil {
+		return err
+	}
 
 	x0, y0 := s.posX, s.posY
 	dx, dy := x1-x0, y1-y0
@@ -88,11 +91,9 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 	start := time.Now()
 	var settleStart time.Time
 	inSettle := false
-	iter := 0
 
 	for {
 		loopStart := time.Now()
-		iter++
 
 		select {
 		case <-ctx.Done():
@@ -122,22 +123,6 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 			return fmt.Errorf("robot: LineTo read pos: %w", err)
 		}
 
-		// Periodic fault check.
-		if iter%s.cfg.LineFaultEvery == 0 {
-			for j, m := range s.motors {
-				f, ferr := m.ReadFault()
-				if ferr != nil {
-					_ = s.EmergencyStop()
-					return fmt.Errorf("robot: motor %d fault read: %w", j+1, ferr)
-				}
-				if f != 0 {
-					slog.Warn("drive fault during LineTo", "motor", j+1, "fault", f)
-					_ = s.EmergencyStop()
-					return fmt.Errorf("robot: motor %d fault %d", j+1, f)
-				}
-			}
-		}
-
 		// Settle phase: after the velocity profile ends, run pure correction
 		// until all cables converge within lineSettleTol pulses of the target.
 		if profileDone {
@@ -153,8 +138,14 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 					break
 				}
 			}
-			if converged || time.Since(settleStart) > s.cfg.LineSettleLim {
+			if converged {
 				break
+			}
+			if time.Since(settleStart) > s.cfg.LineSettleLim {
+				_ = s.EmergencyStop()
+				slog.Warn("LineTo: settle timeout", "target_x", x1, "target_y", y1)
+				return fmt.Errorf("robot: LineTo settle timeout after %.1fs — target (%.1f, %.1f) not reached",
+					s.cfg.LineSettleLim.Seconds(), x1, y1)
 			}
 		}
 
@@ -166,7 +157,7 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 			// Proportional correction: pulls actual cable length toward desired.
 			corrSpeed := s.cfg.LineCorrGain * (desiredNow[i] - actual[i])
 
-			rpmFloat := -(ffSpeed + corrSpeed) / circMM * 60
+			rpmFloat := -(ffSpeed + corrSpeed) / circMM * 60 * float64(s.motorDir(i))
 			rpm := int16(math.Round(rpmFloat))
 			if rpm > capRPM {
 				rpm = capRPM

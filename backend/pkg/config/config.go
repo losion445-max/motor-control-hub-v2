@@ -69,6 +69,12 @@ type HardwareConfig struct {
 	// 80AST-A1C04025: 2500-line encoder × 4 = 10000 PPR.
 	// Together with DrumRadiusMM this determines the mm↔pulse conversion.
 	PulsesPerRev int `toml:"pulses_per_rev"`
+
+	// MotorReversed inverts the winding direction for each motor individually.
+	// Set to true for a motor whose drum is mounted so that positive RPM
+	// pays out instead of winding in (i.e. the cable wraps the opposite way).
+	// Index 0 = M1, 1 = M2, 2 = M3, 3 = M4.
+	MotorReversed [4]bool `toml:"motor_reversed"`
 }
 
 // HomingConfig contains parameters for the homing (calibration) sequence.

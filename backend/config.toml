@@ -9,8 +9,8 @@
 [server]
 addr              = ":8080"          # HTTP listen address
 serial_port       = "/dev/ttyUSB0"  # RS-485 device
-baud_rate         = 19200            # must match drive P-179
-status_interval_ms = 200             # motor poll → WebSocket broadcast interval
+baud_rate         = 115200            # must match drive P-179
+status_interval_ms = 20             # motor poll → WebSocket broadcast interval
 log_format        = "text"           # "text" (dev) | "json" (prod)
 log_level         = "info"           # "debug" | "info" | "warn" | "error"
 
@@ -28,6 +28,7 @@ width_mm        = 1400.0  # horizontal M1→M2 distance
 height_mm       = 2400.0  # vertical M1→M4 distance
 drum_radius_mm  = 67.8    # effective cable drum radius (mid-cable)
 pulses_per_rev  = 10000   # encoder PPR: 80AST-A1C04025 has 2500-line encoder × 4
+motor_reversed  = [true, true, true, true]  # invert winding direction per motor [M1,M2,M3,M4]
 
 [homing]
 rpm        = 25   # winding speed during calibration
@@ -51,18 +52,18 @@ approach_rpm        = 30      # final approach speed (RPM) for all motors
 approach_factor     = 5       # approach zone = max(factor × maxRPM, min_approach) pulses
 min_approach_pulses = 50      # floor for approach zone (~2 mm); prevents collapse on short moves
 tolerance_pulses    = 50      # stop when remaining ≤ this (~2 mm)
-poll_ms             = 15      # how often motor positions are read during a move
+poll_ms             = 15     # how often motor positions are read during a move
 stop_settle_ms      = 150     # settle time after all motors have stopped
 disable_wait_ms     = 80      # wait after disable before reading start positions
-approach_switch_ms  = 30      # wait between collective disable and re-enable at approach speed
+approach_switch_ms  = 30      # wait between collective disable and re-enable at appach speed
 
 [line]
 # LineTo — continuous closed-loop velocity controller
 # Motor speeds are set every tick; no per-step stops.
 
-tick_ms           = 100   # control loop period
-correction_gain   = 3.0   # proportional cable-error gain: (mm/s) per mm of cable-length error
-fault_check_every = 20    # read fault registers every N ticks (~2 s at 100 ms tick)
+tick_ms           = 25   # control loop period
+correction_gain   = 2.0   # proportional cable-error gain: (mm/s) per mm of cable-length error
+fault_check_every = 3     # read fault registers every N ticks (every 75ms at 25ms tick)
 settle_tol_pulses = 50    # final settle: done when all cable errors < this (~2 mm)
 settle_timeout_s  = 3.0   # max wait in settle phase before giving up
 

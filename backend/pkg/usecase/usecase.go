@@ -300,6 +300,9 @@ func (o *Orchestrator) RunGcode(ctx context.Context, src string, opts runner.Opt
 }
 
 // Stop cancels any running operation and immediately disables all motors.
+// EmergencyStop is always called for immediate hardware response; the running
+// operation's ctx.Done() handler may also call it, but Bus.mu serialises the
+// frames so the second call is a harmless no-op at the drive level.
 func (o *Orchestrator) Stop() error {
 	o.mu.Lock()
 	if o.cancelOp != nil {
@@ -311,7 +314,14 @@ func (o *Orchestrator) Stop() error {
 }
 
 // HoldTension enables passive cable tension on all motors.
+// Returns an error if a motion operation is in progress.
 func (o *Orchestrator) HoldTension() error {
+	o.mu.Lock()
+	busy := o.busy
+	o.mu.Unlock()
+	if busy {
+		return fmt.Errorf("robot busy — cannot hold tension during movement")
+	}
 	slog.Info("hold tension started")
 	if err := o.robot.HoldTension(); err != nil {
 		slog.Warn("hold tension failed", "err", err)

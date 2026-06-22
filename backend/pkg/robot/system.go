@@ -19,6 +19,7 @@ type driveMotor interface {
 	Disable() error
 	WriteParam(addr, value uint16) error
 	ReadAbsPosition() (int32, error)
+	ReadAbsPosAndFault() (pos int32, fault uint16, err error)
 	ReadTorquePct() (int16, error)
 	ReadFault() (uint16, error)
 	ReadStatus() (*t3d.Status, error)
@@ -82,9 +83,10 @@ func (s *System) Home(ctx context.Context) error {
 		}
 	}
 
-	// Start all motors winding in slowly.
+	// Start all motors winding in slowly (direction-corrected per drum orientation).
 	for i, m := range s.motors {
-		if err := m.WriteParam(t3d.ParamInternalSpd1, uint16(int16(s.cfg.HomingRPM))); err != nil {
+		rpm := s.cfg.HomingRPM * s.motorDir(i)
+		if err := m.WriteParam(t3d.ParamInternalSpd1, uint16(int16(rpm))); err != nil {
 			return fmt.Errorf("home: motor %d set speed: %w", i+1, err)
 		}
 		if err := m.Enable(); err != nil {
@@ -122,6 +124,7 @@ func (s *System) Home(ctx context.Context) error {
 				if err := m.Disable(); err != nil {
 					return fmt.Errorf("home: motor %d disable: %w", i+1, err)
 				}
+				time.Sleep(30 * time.Millisecond) // let motor coast to rest before reading encoder
 				pos, err := m.ReadAbsPosition()
 				if err != nil {
 					return fmt.Errorf("home: motor %d read pos: %w", i+1, err)
@@ -164,6 +167,9 @@ func (s *System) MoveTo(ctx context.Context, x, y, speedMmPerSec float64) error 
 	if !s.homed {
 		return fmt.Errorf("robot: MoveTo called before Home")
 	}
+	if err := s.checkWorkspace(x, y, speedMmPerSec); err != nil {
+		return err
+	}
 
 	targets := cableLengths(x, y, s.cfg.WidthMM, s.cfg.HeightMM)
 	currLens, err := s.currentCableLengths()
@@ -174,11 +180,12 @@ func (s *System) MoveTo(ctx context.Context, x, y, speedMmPerSec float64) error 
 	// Compute delta pulses for each motor.
 	// ΔL > 0 means cable must get longer (pay out) → negative pulses.
 	// ΔL < 0 means cable must get shorter (wind in) → positive pulses.
+	// motorDir negates for drums mounted in the opposite winding orientation.
 	var deltaPulses [4]int64
 	var maxAbsMM float64
 	for i := range 4 {
 		deltaL := targets[i] - currLens[i]
-		deltaPulses[i] = mmToPulses(-deltaL, s.cfg.DrumRadiusMM, s.cfg.PulsesPerRev)
+		deltaPulses[i] = mmToPulses(-deltaL, s.cfg.DrumRadiusMM, s.cfg.PulsesPerRev) * int64(s.motorDir(i))
 		if absMM := math.Abs(deltaL); absMM > maxAbsMM {
 			maxAbsMM = absMM
 		}
@@ -228,7 +235,7 @@ func (s *System) HoldTension() error {
 		if err := m.SetTorqueLimit(s.cfg.HoldTensionPct); err != nil {
 			return fmt.Errorf("robot: hold tension motor %d: %w", i+1, err)
 		}
-		if err := m.SetSpeed(s.cfg.HoldTensionRPM); err != nil {
+		if err := m.SetSpeed(s.cfg.HoldTensionRPM * s.motorDir(i)); err != nil {
 			return fmt.Errorf("robot: hold tension motor %d: %w", i+1, err)
 		}
 	}
@@ -482,22 +489,48 @@ func (s *System) collectiveSlowdown(done [4]bool, pulses [4]int64, speeds [4]int
 	return nil
 }
 
-// currentCableLengths computes the current cable lengths (mm) from encoder readings.
-//
-// Convention: positive encoder change since home = motor wound in = cable shorter.
-//   currentLen[i] = homeLenMM - (pos[i] - homePos[i]) / pulsesPerMM
+// currentCableLengths reads the absolute encoder position and fault code from each
+// motor in a single FC04 transaction, applies motorDir, and returns cable lengths
+// in mm. Returns error on read failure or if any motor reports a non-zero fault.
 func (s *System) currentCableLengths() ([4]float64, error) {
 	ppm := pulsesPerMM(s.cfg.DrumRadiusMM, s.cfg.PulsesPerRev)
 	var lengths [4]float64
 	for i, m := range s.motors {
-		pos, err := m.ReadAbsPosition()
+		pos, fault, err := m.ReadAbsPosAndFault()
 		if err != nil {
-			return lengths, fmt.Errorf("motor %d: read pos: %w", i+1, err)
+			return lengths, fmt.Errorf("motor %d: read: %w", i+1, err)
 		}
-		deltaEncoder := float64(int64(pos) - int64(s.homePos[i]))
+		if fault != 0 {
+			slog.Warn("drive fault detected", "motor", i+1, "fault", fmt.Sprintf("0x%04X", fault))
+			return lengths, fmt.Errorf("motor %d: fault 0x%04X", i+1, fault)
+		}
+		deltaEncoder := float64(int64(pos)-int64(s.homePos[i])) * float64(s.motorDir(i))
 		lengths[i] = s.homeLenMM - deltaEncoder/ppm
 	}
 	return lengths, nil
+}
+
+// motorDir returns the direction multiplier for motor i: +1 for normal, -1 for reversed.
+// Multiply any RPM or pulse-count command by this value to account for drums mounted
+// so that positive RPM pays out instead of winding in.
+func (s *System) motorDir(i int) int {
+	if s.cfg.MotorReversed[i] {
+		return -1
+	}
+	return 1
+}
+
+const maxCableSpeedMmPerSec = 250.0 // physical drum limit: ~237 mm/s at 2000 RPM
+
+func (s *System) checkWorkspace(x, y, speed float64) error {
+	if x < 0 || x > s.cfg.WidthMM || y < 0 || y > s.cfg.HeightMM {
+		return fmt.Errorf("robot: position (%.1f, %.1f) outside workspace [0,%.0f]×[0,%.0f]",
+			x, y, s.cfg.WidthMM, s.cfg.HeightMM)
+	}
+	if speed <= 0 || speed > maxCableSpeedMmPerSec {
+		return fmt.Errorf("robot: speed %.1f out of range (0, %.0f]", speed, maxCableSpeedMmPerSec)
+	}
+	return nil
 }
 
 // mmPerSecToRPM converts a cable speed (mm/s) to motor RPM for the given drum radius.

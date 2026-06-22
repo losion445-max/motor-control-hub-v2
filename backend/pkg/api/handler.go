@@ -27,8 +27,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/losion445-max/motor-control-hub-v2/pkg/runner"
@@ -115,6 +118,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case <-ctx.Done():
 				return
 			case msg := <-send:
+				_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 				if err := conn.WriteJSON(msg); err != nil {
 					slog.Debug("ws write error", "remote", r.RemoteAddr, "err", err)
 					cancel()
@@ -162,12 +166,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func validateMotion(x, y, speed float64) error {
+	if math.IsNaN(x) || math.IsInf(x, 0) || math.IsNaN(y) || math.IsInf(y, 0) {
+		return fmt.Errorf("invalid coordinates")
+	}
+	if math.IsNaN(speed) || math.IsInf(speed, 0) || speed < 0 {
+		return fmt.Errorf("invalid speed: %.3f", speed)
+	}
+	return nil
+}
+
 func (h *Handler) dispatch(ctx context.Context, msg inMsg, out chan<- usecase.Event) {
 	switch msg.Cmd {
 	case "home":
 		h.orch.Calibrate(ctx, out)
 
 	case "move":
+		if err := validateMotion(msg.X, msg.Y, msg.Speed); err != nil {
+			out <- usecase.Event{Kind: usecase.KindError, Message: err.Error()}
+			return
+		}
 		spd := msg.Speed
 		if spd <= 0 {
 			spd = float64(h.opts.RapidMmPerSec)
@@ -175,6 +193,10 @@ func (h *Handler) dispatch(ctx context.Context, msg inMsg, out chan<- usecase.Ev
 		h.orch.Move(ctx, msg.X, msg.Y, spd, out)
 
 	case "line":
+		if err := validateMotion(msg.X, msg.Y, msg.Speed); err != nil {
+			out <- usecase.Event{Kind: usecase.KindError, Message: err.Error()}
+			return
+		}
 		spd := msg.Speed
 		if spd <= 0 {
 			spd = float64(h.opts.DefaultFeedMmPerSec)
@@ -182,6 +204,11 @@ func (h *Handler) dispatch(ctx context.Context, msg inMsg, out chan<- usecase.Ev
 		h.orch.Line(ctx, msg.X, msg.Y, spd, out)
 
 	case "gcode":
+		const maxGcodeBytes = 1 << 20 // 1 MiB
+		if len(msg.Program) > maxGcodeBytes {
+			out <- usecase.Event{Kind: usecase.KindError, Message: "gcode program too large (max 1 MiB)"}
+			return
+		}
 		h.orch.RunGcode(ctx, msg.Program, h.opts, out)
 
 	case "stop":

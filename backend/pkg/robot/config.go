@@ -28,7 +28,8 @@ type Config struct {
 	WidthMM      float64 // W: horizontal distance M1→M2 (mm)
 	HeightMM     float64 // H: vertical distance M1→M4 (mm)
 	DrumRadiusMM float64 // effective cable drum radius at mid-cable (mm)
-	PulsesPerRev int     // encoder PPR (10000 for 80AST-A1C04025: 2500-line × 4)
+	PulsesPerRev  int      // encoder PPR (10000 for 80AST-A1C04025: 2500-line × 4)
+	MotorReversed [4]bool  // invert winding direction per motor (index 0=M1…3=M4)
 
 	// ── Homing ────────────────────────────────────────────────────────────────
 
@@ -93,9 +94,9 @@ var DefaultConfig = Config{
 	DisableWait:       80 * time.Millisecond,
 	ApproachSwitch:    30 * time.Millisecond,
 
-	LineTickDT:     100 * time.Millisecond,
-	LineCorrGain:   3.0,
-	LineFaultEvery: 20,
+	LineTickDT:     25 * time.Millisecond,
+	LineCorrGain:   2.0,
+	LineFaultEvery: 3,
 	LineSettleTol:  50,
 	LineSettleLim:  3 * time.Second,
 }

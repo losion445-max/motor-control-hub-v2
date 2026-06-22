@@ -122,10 +122,11 @@ func initLogger(format, level string) {
 // robotConfig maps the loaded app config into robot.Config.
 func robotConfig(cfg *appcfg.Config) robot.Config {
 	return robot.Config{
-		WidthMM:      cfg.Hardware.WidthMM,
-		HeightMM:     cfg.Hardware.HeightMM,
-		DrumRadiusMM: cfg.Hardware.DrumRadiusMM,
-		PulsesPerRev: cfg.Hardware.PulsesPerRev,
+		WidthMM:       cfg.Hardware.WidthMM,
+		HeightMM:      cfg.Hardware.HeightMM,
+		DrumRadiusMM:  cfg.Hardware.DrumRadiusMM,
+		PulsesPerRev:  cfg.Hardware.PulsesPerRev,
+		MotorReversed: cfg.Hardware.MotorReversed,
 
 		HomingRPM:       cfg.Homing.RPM,
 		HomingTorquePct: cfg.Homing.TorquePct,

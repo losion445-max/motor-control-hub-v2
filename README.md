@@ -229,6 +229,8 @@ width_mm       = 1400.0   # frame width: horizontal M1→M2 distance (mm)
 height_mm      = 2400.0   # frame height: vertical M1→M4 distance (mm)
 drum_radius_mm = 67.8     # effective cable drum radius at mid-cable (mm)
 pulses_per_rev = 10000    # encoder PPR (80AST-A1C04025: 2500-line × 4)
+motor_reversed = [true, true, true, true]  # invert winding direction per motor [M1,M2,M3,M4]
+                                            # true = positive RPM pays out instead of winding in
 
 [homing]
 rpm        = 25   # cable winding speed during calibration (RPM)
@@ -257,7 +259,9 @@ approach_switch_ms  = 30      # pause between disable and re-enable at approach 
 # LineTo — continuous closed-loop velocity controller (straight Cartesian lines)
 tick_ms           = 100   # control loop period (ms) — limited by Modbus read time at 19200 baud
 correction_gain   = 3.0   # proportional gain: (mm/s cable speed) per mm cable-length error
-fault_check_every = 20    # read fault registers every N ticks (≈ 2 s at 100 ms tick)
+fault_check_every = 3     # read fault registers every N ticks (≈ 75 ms at 25 ms tick)
+                          # do not set to 1 — at 115200 baud the fault read adds ~9 ms per tick
+                          # and will overflow the 25 ms tick budget
 settle_tol_pulses = 50    # settle condition: all cable errors < this (≈ 2 mm)
 settle_timeout_s  = 3.0   # max time in settle phase before LineTo gives up (s)
 
@@ -265,6 +269,55 @@ settle_timeout_s  = 3.0   # max time in settle phase before LineTo gives up (s)
 rapid_mm_per_sec        = 200.0  # G0 rapid move speed (mm/s)
 default_feed_mm_per_sec = 20.0   # G1 feed rate before first F word (mm/s)
 ```
+
+### Common configuration changes
+
+**Different serial port:**
+```toml
+[server]
+serial_port = "/dev/ttyUSB1"
+```
+
+**Different frame size (e.g. 2000×3000 mm):**
+```toml
+[hardware]
+width_mm  = 2000.0
+height_mm = 3000.0
+```
+
+**All motors mounted with reversed winding (current config):**
+```toml
+[hardware]
+motor_reversed = [true, true, true, true]
+```
+Set a motor's entry to `true` when its drum is physically mounted so that positive RPM pays out cable instead of winding in. Set to `false` for normal orientation.
+
+**Only specific motors reversed:**
+```toml
+[hardware]
+motor_reversed = [false, true, true, false]  # M2 and M3 only
+```
+
+**Faster scan speed:**
+```toml
+[gcode]
+rapid_mm_per_sec        = 150.0
+default_feed_mm_per_sec = 80.0
+```
+
+**Quiet logs (warnings and errors only):**
+```toml
+[server]
+log_level = "warn"
+```
+
+**Structured JSON logs for systemd/logstash:**
+```toml
+[server]
+log_format = "json"
+```
+
+After any change: restart the backend (`make stop && make start`).
 
 ### Baud rate table (P-182)
 
