@@ -103,6 +103,18 @@ class WsClient {
     }
   }
 
+  // sendNow sends msg only if the socket is open right now.
+  // Does NOT queue — for time-critical commands (emergency stop) where a
+  // stale queued message arriving later would be wrong or dangerous.
+  // Returns true if the message was sent, false if the socket was not open.
+  sendNow(msg: InCommand): boolean {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(msg))
+      return true
+    }
+    return false
+  }
+
   subscribeCmd(id: string, cb: (e: OutEvent) => void): () => void {
     this.commandSubs.set(id, cb)
     return () => this.commandSubs.delete(id)

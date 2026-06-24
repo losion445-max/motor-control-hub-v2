@@ -314,15 +314,15 @@ func (m *Motor) SetSpeed(rpm int) error {
 	return m.Enable()
 }
 
-// SetTorqueLimit sets P-069 — the maximum torque the drive will produce as a
-// percentage of rated torque (0..300, default 300).
+// SetTorqueLimit sets both P-069 (forward) and P-070 (reverse) torque limits
+// to pct percent of rated torque (0..300, default 300).
 //
-// In speed mode with a cable/drum: when the load reaches this limit the motor
-// stalls holding that force instead of overshooting. Use as a hardware tension
-// cap and combine with a slow winding speed for passive auto-tension:
+// Both must be set: P-069 applies only when the motor spins in the positive
+// direction; P-070 applies only in the negative direction. When motorDir=-1
+// the drive runs at negative RPM, so only P-070 is active as the hardware cap.
 //
-//	m.SetTorqueLimit(40)     // max 40% × 2.4 Nm = 0.96 Nm
-//	m.SetSpeed(25)           // slow winding; stalls when cable is taut
+//	m.SetTorqueLimit(40)     // max 40% × 2.4 Nm = 0.96 Nm in both directions
+//	m.SetSpeed(-25)          // slow reverse winding; stalls when cable is taut
 func (m *Motor) SetTorqueLimit(pct int) error {
 	if pct < 0 {
 		pct = 0
@@ -330,7 +330,10 @@ func (m *Motor) SetTorqueLimit(pct int) error {
 	if pct > 300 {
 		pct = 300
 	}
-	return m.WriteParam(ParamTorqueLimit, uint16(pct))
+	if err := m.WriteParam(ParamTorqueLimit, uint16(pct)); err != nil {
+		return err
+	}
+	return m.WriteParam(ParamTorqueRevLimit, uint16(pct))
 }
 
 // SetAccelTime sets P-060 — the acceleration ramp time in milliseconds per 1000 RPM.

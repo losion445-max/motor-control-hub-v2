@@ -34,7 +34,7 @@ func NewBus(port string, baud int) *Bus {
 	h.DataBits = 8
 	h.Parity = "E"
 	h.StopBits = 1
-	h.Timeout = 50 * time.Millisecond
+	h.Timeout = 15 * time.Millisecond
 	return &Bus{handler: h}
 }
 

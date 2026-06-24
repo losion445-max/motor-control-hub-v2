@@ -1,20 +1,36 @@
-import { useCommand } from "@/hooks/useCommand"
+import { useWsContext } from "@/context/WsContext"
 import { toast } from "@/components/ui/use-toast"
+import { cn } from "@/lib/utils"
 
 export function StopButton() {
-  const { run } = useCommand()
+  const { client, connectionState } = useWsContext()
+  const connected = connectionState === "connected"
 
   const handleStop = () => {
-    run("stop")
-    toast({ title: "Emergency stop sent", variant: "destructive" })
+    const id = crypto.randomUUID()
+    const sent = client.sendNow({ id, cmd: "stop" })
+    if (sent) {
+      toast({ title: "Emergency stop sent", variant: "destructive" })
+    } else {
+      toast({
+        title: "Not connected — stop NOT sent",
+        description: "WebSocket is disconnected. Reconnecting…",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
     <button
       onClick={handleStop}
-      className="w-full h-16 rounded-lg bg-destructive text-destructive-foreground text-xl font-bold tracking-widest hover:bg-destructive/90 active:scale-95 transition-all"
+      className={cn(
+        "w-full h-16 rounded-lg text-xl font-bold tracking-widest transition-all active:scale-95",
+        connected
+          ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          : "bg-destructive/40 text-destructive-foreground/60 cursor-not-allowed",
+      )}
     >
-      STOP
+      {connected ? "STOP" : "STOP (offline)"}
     </button>
   )
 }
