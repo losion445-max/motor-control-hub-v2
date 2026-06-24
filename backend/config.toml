@@ -32,13 +32,13 @@ motor_reversed  = [true, true, true, true]  # invert winding direction per motor
 
 [homing]
 rpm        = 25   # winding speed during calibration
-torque_pct = 18   # torque % that signals cable is taut
+torque_pct = 1   # torque % that signals cable is taut
 
 [safety]
-torque_pct = 75   # emergency-stop threshold (% of rated torque)
+torque_pct = 1   # emergency-stop threshold (% of rated torque)
 
 [hold_tension]
-torque_pct = 30   # cable tension-hold torque cap (P-069)
+torque_pct = 1   # cable tension-hold torque cap (P-069)
 rpm        = 20   # slow winding speed for tension maintenance
 
 # ── Motion controllers ────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ approach_rpm        = 30      # final approach speed (RPM) for all motors
 approach_factor     = 5       # approach zone = max(factor × maxRPM, min_approach) pulses
 min_approach_pulses = 50      # floor for approach zone (~2 mm); prevents collapse on short moves
 tolerance_pulses    = 50      # stop when remaining ≤ this (~2 mm)
-poll_ms             = 15     # how often motor positions are read during a move
+poll_ms             = 10     # how often motor positions are read during a move
 stop_settle_ms      = 150     # settle time after all motors have stopped
 disable_wait_ms     = 80      # wait after disable before reading start positions
 approach_switch_ms  = 30      # wait between collective disable and re-enable at appach speed
