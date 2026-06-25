@@ -63,11 +63,21 @@ func NewSystem(port string, baud int, cfg Config) *System {
 	return s
 }
 
-// Connect opens the serial port.
-func (s *System) Connect() error { return s.bus.Connect() }
+// Connect opens the serial port. No-op for sim systems (bus == nil).
+func (s *System) Connect() error {
+	if s.bus == nil {
+		return nil
+	}
+	return s.bus.Connect()
+}
 
-// Close releases the serial port.
-func (s *System) Close() error { return s.bus.Close() }
+// Close releases the serial port. No-op for sim systems (bus == nil).
+func (s *System) Close() error {
+	if s.bus == nil {
+		return nil
+	}
+	return s.bus.Close()
+}
 
 // ── Homing ────────────────────────────────────────────────────────────────────
 

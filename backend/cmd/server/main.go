@@ -30,6 +30,7 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config.toml", "path to TOML config file")
+	sim := flag.Bool("sim", false, "run with simulated motors (no RS-485 hardware required)")
 	flag.Parse()
 
 	// ── Load config ───────────────────────────────────────────────────────────
@@ -44,13 +45,19 @@ func main() {
 
 	// ── Robot ─────────────────────────────────────────────────────────────────
 	robotCfg := robotConfig(cfg)
-	sys := robot.NewSystem(cfg.Server.SerialPort, cfg.Server.BaudRate, robotCfg)
-	if err := sys.Connect(); err != nil {
-		slog.Error("serial connect failed", "port", cfg.Server.SerialPort, "err", err)
-		os.Exit(1)
+	var sys *robot.System
+	if *sim {
+		sys = robot.NewSimSystem(robotCfg)
+		slog.Info("simulation mode: using virtual motors (no RS-485)")
+	} else {
+		sys = robot.NewSystem(cfg.Server.SerialPort, cfg.Server.BaudRate, robotCfg)
+		if err := sys.Connect(); err != nil {
+			slog.Error("serial connect failed", "port", cfg.Server.SerialPort, "err", err)
+			os.Exit(1)
+		}
+		defer sys.Close()
+		slog.Info("drives connected", "port", cfg.Server.SerialPort, "baud", cfg.Server.BaudRate)
 	}
-	defer sys.Close()
-	slog.Info("drives connected", "port", cfg.Server.SerialPort, "baud", cfg.Server.BaudRate)
 
 	// ── Orchestrator ──────────────────────────────────────────────────────────
 	orch := usecase.New(sys)
