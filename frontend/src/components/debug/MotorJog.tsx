@@ -18,23 +18,24 @@ function MotorCard({ motor }: { motor: (typeof MOTORS)[0] }) {
   const [rpm, setRpm] = useState("25")
   const [jogging, setJogging] = useState<"wind" | "unwind" | null>(null)
 
-  const jog = (dir: "wind" | "unwind") => {
+  const startJog = (e: React.PointerEvent, dir: "wind" | "unwind") => {
     const speed = Math.abs(Number(rpm)) || 25
-    const directedRpm = dir === "wind" ? speed : -speed
     const sent = client.sendNow({
       id: crypto.randomUUID(),
       cmd: "jog_start",
       motor: motor.id,
-      rpm: directedRpm,
+      rpm: dir === "wind" ? speed : -speed,
     })
-    if (sent) {
-      setJogging(dir)
-    } else {
+    if (!sent) {
       toast({ title: "Not connected", variant: "destructive" })
+      return
     }
+    // Pointer capture: pointerup fires on this element even if pointer moves away.
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setJogging(dir)
   }
 
-  const stop = () => {
+  const stopJog = () => {
     client.sendNow({ id: crypto.randomUUID(), cmd: "jog_stop", motor: motor.id })
     setJogging(null)
   }
@@ -62,29 +63,29 @@ function MotorCard({ motor }: { motor: (typeof MOTORS)[0] }) {
             value={rpm}
             onChange={(e) => setRpm(e.target.value)}
             className="h-7 text-sm"
+            disabled={jogging !== null}
           />
         </div>
         <Button
           size="sm"
           variant={jogging === "wind" ? "default" : "outline"}
-          className="w-full h-7 text-xs"
-          onClick={() => (jogging === "wind" ? stop() : jog("wind"))}
+          className="w-full h-8 text-xs select-none"
+          onPointerDown={(e) => startJog(e, "wind")}
+          onPointerUp={stopJog}
+          onPointerCancel={stopJog}
         >
-          {jogging === "wind" ? "■ Stop" : "↑ Wind in"}
+          ↑ Wind in
         </Button>
         <Button
           size="sm"
           variant={jogging === "unwind" ? "default" : "outline"}
-          className="w-full h-7 text-xs"
-          onClick={() => (jogging === "unwind" ? stop() : jog("unwind"))}
+          className="w-full h-8 text-xs select-none"
+          onPointerDown={(e) => startJog(e, "unwind")}
+          onPointerUp={stopJog}
+          onPointerCancel={stopJog}
         >
-          {jogging === "unwind" ? "■ Stop" : "↓ Unwind"}
+          ↓ Unwind
         </Button>
-        {jogging && (
-          <Button size="sm" variant="destructive" className="w-full h-7 text-xs" onClick={stop}>
-            STOP
-          </Button>
-        )}
       </CardContent>
     </Card>
   )
