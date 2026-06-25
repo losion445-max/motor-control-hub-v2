@@ -81,6 +81,30 @@ func (s *System) Close() error {
 
 // ── Homing ────────────────────────────────────────────────────────────────────
 
+// SetHome declares the current encoder positions as the home reference without
+// running the physical homing sequence (no cable tensioning).
+// Use when you have manually placed the camera at (x, y) and want to skip
+// the full Home procedure for testing. Accuracy depends on actual camera placement.
+func (s *System) SetHome(x, y float64) error {
+	if x == 0 && y == 0 {
+		x = s.cfg.WidthMM / 2
+		y = s.cfg.HeightMM / 2
+	}
+	for i, m := range s.motors {
+		pos, err := m.ReadAbsPosition()
+		if err != nil {
+			return fmt.Errorf("set_home: motor %d read pos: %w", i+1, err)
+		}
+		s.homePos[i] = pos
+	}
+	s.homeLenMM = homeLength(s.cfg.WidthMM, s.cfg.HeightMM)
+	s.posX = x
+	s.posY = y
+	s.homed = true
+	slog.Info("set_home: manual reference declared", "x", x, "y", y, "home_pos", s.homePos)
+	return nil
+}
+
 // Home tensions all 4 cables until each reaches the torque threshold, then
 // declares the camera to be at the centre of the workspace (W/2, H/2).
 //

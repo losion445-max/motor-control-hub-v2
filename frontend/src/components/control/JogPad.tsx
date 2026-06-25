@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   ArrowUp,
   ArrowDown,
@@ -21,13 +21,23 @@ interface JogPadProps {
 
 export function JogPad({ currentX, currentY, feedSpeed, disabled }: JogPadProps) {
   const [step, setStep] = useState<Step>(10)
-  const { run, pending } = useCommand()
+  const { run, pending, error, messages } = useCommand()
+
+  useEffect(() => {
+    if (error) {
+      toast({ title: "Jog failed", description: error, variant: "destructive" })
+    }
+  }, [error])
+
+  useEffect(() => {
+    const last = messages.at(-1)
+    if (last) toast({ title: last })
+  }, [messages])
 
   const jog = (dx: number, dy: number) => {
     const nx = Math.min(1400, Math.max(0, currentX + dx))
     const ny = Math.min(2400, Math.max(0, currentY + dy))
     run("line", { x: nx, y: ny, speed: feedSpeed })
-    toast({ title: `Jog → (${nx}, ${ny})` })
   }
 
   const isDisabled = disabled || pending

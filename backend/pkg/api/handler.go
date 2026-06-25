@@ -293,6 +293,15 @@ func (h *Handler) dispatch(ctx context.Context, msg inMsg, out chan<- usecase.Ev
 			out <- usecase.Event{Kind: usecase.KindDone, Message: fmt.Sprintf("motor %d P-%03d = %d", msg.Motor, msg.Addr, msg.Value)}
 		}
 
+	case "set_home":
+		// x=0, y=0 means "use workspace centre" (robot picks W/2, H/2 internally).
+		if err := h.orch.SetHome(msg.X, msg.Y); err != nil {
+			out <- usecase.Event{Kind: usecase.KindError, Message: err.Error()}
+		} else {
+			x, y := h.orch.Status().X, h.orch.Status().Y
+			out <- usecase.Event{Kind: usecase.KindDone, Message: fmt.Sprintf("manual home declared at (%.0f, %.0f)", x, y)}
+		}
+
 	default:
 		out <- usecase.Event{Kind: usecase.KindError, Message: "unknown command: " + msg.Cmd}
 	}

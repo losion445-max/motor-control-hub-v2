@@ -112,6 +112,7 @@ func (m *mockRobot) JogStop(_ int) error                            { return nil
 func (m *mockRobot) ReadMotorStatus(_ int) (*t3d.Status, error)     { return nil, nil }
 func (m *mockRobot) WriteMotorParam(_ int, _, _ uint16) error       { return nil }
 func (m *mockRobot) ReadMotorParam(_ int, _ uint16) (uint16, error) { return 0, nil }
+func (m *mockRobot) SetHome(_, _ float64) error                     { return nil }
 
 // ── test helpers ──────────────────────────────────────────────────────────────
 

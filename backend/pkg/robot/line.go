@@ -141,6 +141,8 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 			return fmt.Errorf("robot: LineTo read pos: %w", err)
 		}
 
+		finalLens := cableLengths(x1, y1, s.cfg.WidthMM, s.cfg.HeightMM)
+
 		// Settle phase: after the velocity profile ends, run pure correction
 		// until all cables converge within lineSettleTol pulses of the target.
 		if profileDone {
@@ -148,7 +150,6 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 				inSettle = true
 				settleStart = time.Now()
 			}
-			finalLens := cableLengths(x1, y1, s.cfg.WidthMM, s.cfg.HeightMM)
 			converged := true
 			for i := range 4 {
 				if int64(math.Abs(finalLens[i]-actual[i])*ppm) > int64(s.cfg.LineSettleTol) {
@@ -175,10 +176,7 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 
 		// Compute and apply motor speeds.
 		for i, m := range s.motors {
-			// Feed-forward: derivative of desired cable length (mm/s).
-			// Positive = cable getting longer = motor must pay out = negative RPM.
 			ffSpeed := (desiredNext[i] - desiredNow[i]) / dtSec
-			// Proportional correction: pulls actual cable length toward desired.
 			corrSpeed := s.cfg.LineCorrGain * (desiredNow[i] - actual[i])
 
 			rpmFloat := -(ffSpeed + corrSpeed) / circMM * 60 * float64(s.motorDir(i))
@@ -187,6 +185,20 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 				rpm = capRPM
 			} else if rpm < -capRPM {
 				rpm = -capRPM
+			}
+
+			// During settle the feed-forward is zero and small errors produce sub-1 RPM
+			// commands that round to 0 — motors stall and settle never converges.
+			// Guarantee at least ±1 RPM whenever there is remaining position error.
+			if inSettle && rpm == 0 {
+				errPulses := int64(math.Abs(finalLens[i]-actual[i]) * ppm)
+				if errPulses > int64(s.cfg.LineSettleTol) {
+					if finalLens[i] > actual[i] {
+						rpm = 1
+					} else {
+						rpm = -1
+					}
+				}
 			}
 
 			if err := m.WriteParam(t3d.ParamInternalSpd1, uint16(rpm)); err != nil {

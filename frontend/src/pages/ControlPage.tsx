@@ -6,6 +6,7 @@ import { MovePanel } from "@/components/control/MovePanel"
 import { JogPad } from "@/components/control/JogPad"
 import { HomeButton } from "@/components/control/HomeButton"
 import { HoldTensionButton } from "@/components/control/HoldTensionButton"
+import { SetHomeButton } from "@/components/control/SetHomeButton"
 import { StopButton } from "@/components/control/StopButton"
 import { MotorGrid } from "@/components/motors/MotorGrid"
 import { useRobotStatus } from "@/hooks/useRobotStatus"
@@ -66,6 +67,7 @@ export function ControlPage({ rapidSpeed, feedSpeed }: ControlPageProps) {
           </CardHeader>
           <CardContent className="px-4 pb-4 flex flex-col gap-2">
             <HomeButton disabled={busy} />
+            <SetHomeButton disabled={busy} />
             <HoldTensionButton disabled={busy || !homed} />
           </CardContent>
         </Card>
@@ -98,7 +100,7 @@ export function ControlPage({ rapidSpeed, feedSpeed }: ControlPageProps) {
               currentX={posX}
               currentY={posY}
               feedSpeed={feedSpeed}
-              disabled={busy || !homed}
+              disabled={busy}
             />
           </CardContent>
         </Card>

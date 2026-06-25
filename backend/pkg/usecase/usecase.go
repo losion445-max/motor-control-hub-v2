@@ -80,6 +80,7 @@ type Robot interface {
 	ReadMotorStatus(motorIdx int) (*t3d.Status, error)
 	WriteMotorParam(motorIdx int, addr, value uint16) error
 	ReadMotorParam(motorIdx int, addr uint16) (uint16, error)
+	SetHome(x, y float64) error
 }
 
 // ── Orchestrator ──────────────────────────────────────────────────────────────
@@ -395,4 +396,17 @@ func (o *Orchestrator) WriteMotorParam(motorIdx int, addr, value uint16) error {
 // ReadMotorParam reads a FC03 holding register from motor motorIdx (1-based).
 func (o *Orchestrator) ReadMotorParam(motorIdx int, addr uint16) (uint16, error) {
 	return o.robot.ReadMotorParam(motorIdx-1, addr)
+}
+
+// SetHome declares the current encoder positions as home without physical tensioning.
+// The camera must be physically placed at (x, y) before calling this.
+func (o *Orchestrator) SetHome(x, y float64) error {
+	o.mu.Lock()
+	busy := o.busy
+	o.mu.Unlock()
+	if busy {
+		return fmt.Errorf("robot busy")
+	}
+	slog.Info("set_home: manual home declared", "x", x, "y", y)
+	return o.robot.SetHome(x, y)
 }
