@@ -32,7 +32,7 @@ motor_reversed  = [true, true, true, true]  # invert winding direction per motor
 
 [homing]
 rpm        = 25   # winding speed during calibration
-torque_pct = 5   # torque % that signals cable is taut (must be above idle noise floor ~1-2%)
+torque_pct = 20   # torque % that signals cable is taut (must be above idle noise floor ~1-2%)
 
 [safety]
 torque_pct      = 70   # software emergency-stop threshold: trip if |torque| ≥ this during any move

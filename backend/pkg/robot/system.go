@@ -272,15 +272,27 @@ func (s *System) HoldTension() error {
 
 // ── Emergency ─────────────────────────────────────────────────────────────────
 
-// EmergencyStop disables all 4 motors immediately. Errors are collected but
-// do not prevent the remaining motors from being stopped.
+// EmergencyStop stops all 4 motors immediately.
+//
+// Two-step approach to handle both FC42-controlled and DI-controlled drives:
+//  1. Write P-137=0 on all motors — works regardless of P-098 (Servo-On source).
+//     The drive decelerates using P-061 ramp; this is the guaranteed stop.
+//  2. Send FC42 0xAA (Disable) — engages the mechanical brake on drives where
+//     servo-on is Modbus-controlled (P-098=1). No-op if P-098=0 (external DI).
+//
+// Errors are collected but never block the remaining motors.
 func (s *System) EmergencyStop() error {
 	slog.Warn("emergency stop")
 	var first error
-	for _, m := range s.motors {
-		if err := m.Disable(); err != nil && first == nil {
-			first = err
+	// Step 1: set speed=0 on all motors (guaranteed to decelerate regardless of SON source).
+	for i, m := range s.motors {
+		if err := m.WriteParam(t3d.ParamInternalSpd1, 0); err != nil && first == nil {
+			first = fmt.Errorf("emergency stop: motor %d set speed 0: %w", i+1, err)
 		}
+	}
+	// Step 2: servo-off (engages brake if drive supports FC42 SON control).
+	for _, m := range s.motors {
+		_ = m.Disable()
 	}
 	return first
 }
@@ -597,12 +609,17 @@ func (s *System) JogMotor(motorIdx, rpm int) error {
 	return s.motors[motorIdx].SetSpeed(rpm * s.motorDir(motorIdx))
 }
 
-// JogStop disables motor motorIdx immediately.
+// JogStop stops motor motorIdx by writing speed=0 to P-137.
+// This works regardless of whether FC42 servo-on is Modbus- or DI-controlled.
 func (s *System) JogStop(motorIdx int) error {
 	if motorIdx < 0 || motorIdx > 3 {
 		return fmt.Errorf("robot: invalid motor index %d", motorIdx)
 	}
-	return s.motors[motorIdx].Disable()
+	if err := s.motors[motorIdx].WriteParam(t3d.ParamInternalSpd1, 0); err != nil {
+		return err
+	}
+	_ = s.motors[motorIdx].Disable()
+	return nil
 }
 
 // ReadMotorStatus reads all FC04 status registers for motor motorIdx (0-based).

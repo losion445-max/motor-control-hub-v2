@@ -76,7 +76,7 @@ var DefaultConfig = Config{
 	PulsesPerRev: 10000,
 
 	HomingRPM:       25,
-	HomingTorquePct: 5,
+	HomingTorquePct: 20,
 
 	TorqueSafetyPct: 70,
 	MoveTorquePct:   80,

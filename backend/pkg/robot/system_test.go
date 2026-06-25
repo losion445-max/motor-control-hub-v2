@@ -106,13 +106,15 @@ func TestEmergencyStop_AllDisabled(t *testing.T) {
 
 func TestEmergencyStop_FirstError(t *testing.T) {
 	s, mocks := newTestSystem(defaultCfg())
-	mocks[0].disableErr = errors.New("motor 1 off")
+	// EmergencyStop now propagates WriteParam errors (speed=0 pass).
+	// Disable errors are intentionally swallowed so all motors are attempted.
+	mocks[0].writeErr = errors.New("motor 1 write failed")
 
 	err := s.EmergencyStop()
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	// All motors must still be attempted despite error on motor 0.
+	// All motors must still have Disable attempted despite error on motor 0.
 	for i, m := range mocks {
 		if m.callsDisable != 1 {
 			t.Errorf("motor %d: Disable called %d times, want 1", i+1, m.callsDisable)
