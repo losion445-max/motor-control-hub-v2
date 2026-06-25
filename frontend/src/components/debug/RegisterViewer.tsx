@@ -38,7 +38,7 @@ const PARAMS: ParamDef[] = [
 interface MotorStatusFields {
   speed_rpm?: number
   torque_pct?: number
-  peak_torque?: number
+  torque_ref_pct?: number
   current_a10?: number
   speed_ref_rpm?: number
   fault_code?: number
@@ -49,16 +49,16 @@ interface MotorStatusFields {
 }
 
 const STATUS_ROWS: { key: keyof MotorStatusFields; label: string; addr: string; unit: string; description: string }[] = [
-  { key: "speed_rpm",       addr: "0x00", label: "Speed",          unit: "RPM", description: "Current motor speed" },
-  { key: "torque_pct",      addr: "0x09", label: "Torque",         unit: "%",   description: "Instantaneous torque (signed, % of 2.4 Nm)" },
-  { key: "peak_torque",     addr: "0x0A", label: "Peak Torque 1s", unit: "%",   description: "Peak torque over last 1 second" },
-  { key: "current_a10",     addr: "0x0B", label: "Current",        unit: "A×10", description: "Phase current (divide by 10 for Amps)" },
-  { key: "speed_ref_rpm",   addr: "0x0E", label: "Speed Setpoint", unit: "RPM", description: "Active internal speed command" },
-  { key: "fault_code",      addr: "0x1A", label: "Fault Code",     unit: "",    description: "0 = no fault; non-zero = active fault" },
-  { key: "position32",      addr: "0x1F/0x20", label: "Abs Position", unit: "pulses", description: "32-bit absolute encoder counter" },
-  { key: "heatsink_temp_c", addr: "0x26", label: "Heatsink Temp",  unit: "°C", description: "Drive heatsink temperature" },
-  { key: "module_temp_c",   addr: "0x27", label: "Module Temp",    unit: "°C", description: "Power module temperature" },
-  { key: "bus_voltage_v",   addr: "0x28", label: "Bus Voltage",    unit: "V",  description: "DC bus voltage (nominal ≈ 310 V)" },
+  { key: "speed_rpm",       addr: "0x00", label: "Speed",           unit: "RPM",  description: "Current motor speed" },
+  { key: "torque_pct",      addr: "0x09", label: "Torque",          unit: "%",    description: "Instantaneous torque (signed, % of 2.4 Nm)" },
+  { key: "torque_ref_pct",  addr: "0x0F", label: "Torque Setpoint", unit: "%",    description: "Active torque command" },
+  { key: "current_a10",     addr: "0x0B", label: "Current",         unit: "A×10", description: "Phase current (divide by 10 for Amps)" },
+  { key: "speed_ref_rpm",   addr: "0x0E", label: "Speed Setpoint",  unit: "RPM",  description: "Active internal speed command" },
+  { key: "fault_code",      addr: "0x1A", label: "Fault Code",      unit: "",     description: "0 = no fault; non-zero = active fault" },
+  { key: "position32",      addr: "0x1F/20", label: "Abs Position", unit: "pulses", description: "32-bit absolute encoder counter" },
+  { key: "heatsink_temp_c", addr: "0x26", label: "Heatsink Temp",   unit: "°C",   description: "Drive heatsink temperature" },
+  { key: "module_temp_c",   addr: "0x27", label: "Module Temp",     unit: "°C",   description: "Power module temperature" },
+  { key: "bus_voltage_v",   addr: "0x28", label: "Bus Voltage",     unit: "V",    description: "DC bus voltage (nominal ≈ 310 V)" },
 ]
 
 function StatusTable({ motor }: { motor: number }) {

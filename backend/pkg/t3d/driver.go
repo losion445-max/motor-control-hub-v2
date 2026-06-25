@@ -13,21 +13,21 @@ const (
 
 // Status is a snapshot of the key FC04 input registers.
 type Status struct {
-	SpeedRPM       int16  // ST-000: motor speed (rpm); negative = reverse
-	PositionL      uint16 // ST-01F: absolute motor position low word (pulses, multi-turn)
-	PositionH      uint16 // ST-020: absolute motor position high word (pulses, multi-turn)
-	Position32     int32  // ST-01F/020 combined as signed 32-bit pulse count
-	TorquePct      int16  // ST-009: torque (% of rated)
-	CurrentA10     uint16 // ST-00B: instantaneous current (A×10; 12 = 1.2 A)
-	SpeedRefRPM    uint16 // ST-00E: speed setpoint (rpm)
-	TorqueRefPct   int16  // ST-00F: torque setpoint (%)
-	DIState        uint16 // ST-012: DI pin states — bit0=DI1 … bit7=DI8
-	DOState        uint16 // ST-013: DO pin states — bit0=DO1 … bit5=DO6
-	FaultCode      uint16 // ST-01A: fault code (0 = no fault)
-	SpeedPrecise10 int16  // ST-01B: precise speed (×0.1 rpm)
-	HeatsinkTempC  int16  // ST-026: heatsink temperature (°C)
-	ModuleTempC    int16  // ST-027: module temperature (°C)
-	BusVoltageV    uint16 // ST-028: DC bus voltage (V; nominal ≈310 V)
+	SpeedRPM       int16  `json:"speed_rpm"`        // ST-000: motor speed (rpm); negative = reverse
+	PositionL      uint16 `json:"position_l"`        // ST-01F: absolute motor position low word (pulses, multi-turn)
+	PositionH      uint16 `json:"position_h"`        // ST-020: absolute motor position high word (pulses, multi-turn)
+	Position32     int32  `json:"position32"`        // ST-01F/020 combined as signed 32-bit pulse count
+	TorquePct      int16  `json:"torque_pct"`        // ST-009: torque (% of rated)
+	CurrentA10     uint16 `json:"current_a10"`       // ST-00B: instantaneous current (A×10; 12 = 1.2 A)
+	SpeedRefRPM    uint16 `json:"speed_ref_rpm"`     // ST-00E: speed setpoint (rpm)
+	TorqueRefPct   int16  `json:"torque_ref_pct"`    // ST-00F: torque setpoint (%)
+	DIState        uint16 `json:"di_state"`           // ST-012: DI pin states — bit0=DI1 … bit7=DI8
+	DOState        uint16 `json:"do_state"`           // ST-013: DO pin states — bit0=DO1 … bit5=DO6
+	FaultCode      uint16 `json:"fault_code"`        // ST-01A: fault code (0 = no fault)
+	SpeedPrecise10 int16  `json:"speed_precise10"`   // ST-01B: precise speed (×0.1 rpm)
+	HeatsinkTempC  int16  `json:"heatsink_temp_c"`   // ST-026: heatsink temperature (°C)
+	ModuleTempC    int16  `json:"module_temp_c"`     // ST-027: module temperature (°C)
+	BusVoltageV    uint16 `json:"bus_voltage_v"`     // ST-028: DC bus voltage (V; nominal ≈310 V)
 }
 
 // Config holds the five parameters that determine how motion commands reach the motor.
