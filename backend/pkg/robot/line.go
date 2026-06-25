@@ -138,6 +138,12 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 					break
 				}
 			}
+			select {
+			case <-ctx.Done():
+				_ = s.EmergencyStop()
+				return ctx.Err()
+			default:
+			}
 			if converged {
 				break
 			}
@@ -177,8 +183,15 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 		}
 	}
 
-	for _, m := range s.motors {
-		_ = m.Disable()
+	var disableErr error
+	for i, m := range s.motors {
+		if err := m.Disable(); err != nil && disableErr == nil {
+			disableErr = fmt.Errorf("robot: motor %d disable after settle: %w", i+1, err)
+		}
+	}
+	if disableErr != nil {
+		_ = s.EmergencyStop()
+		return disableErr
 	}
 	time.Sleep(s.cfg.StopSettle)
 	s.posX, s.posY = x1, y1

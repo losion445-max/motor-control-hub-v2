@@ -25,11 +25,16 @@ export interface InCommand {
   y?: number
   speed?: number
   program?: string
+  // Debug commands
+  motor?: number  // 1-based motor index (1..4)
+  rpm?: number    // jog speed
+  addr?: number   // FC03 parameter address
+  value?: number  // parameter value
 }
 
 export interface OutEvent {
   id?: string
   kind: EventKind
   message?: string
-  payload?: SystemStatus
+  payload?: unknown
 }

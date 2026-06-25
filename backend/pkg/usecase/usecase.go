@@ -18,6 +18,7 @@ import (
 	"github.com/losion445-max/motor-control-hub-v2/pkg/gcode"
 	"github.com/losion445-max/motor-control-hub-v2/pkg/robot"
 	"github.com/losion445-max/motor-control-hub-v2/pkg/runner"
+	"github.com/losion445-max/motor-control-hub-v2/pkg/t3d"
 )
 
 // ── Event types ───────────────────────────────────────────────────────────────
@@ -72,6 +73,13 @@ type Robot interface {
 	Position() (float64, float64)
 	Homed() bool
 	ReadAllStatus() [4]robot.MotorState
+
+	// Debug / manual motor control.
+	JogMotor(motorIdx, rpm int) error
+	JogStop(motorIdx int) error
+	ReadMotorStatus(motorIdx int) (*t3d.Status, error)
+	WriteMotorParam(motorIdx int, addr, value uint16) error
+	ReadMotorParam(motorIdx int, addr uint16) (uint16, error)
 }
 
 // ── Orchestrator ──────────────────────────────────────────────────────────────
@@ -141,7 +149,17 @@ func (o *Orchestrator) broadcast(ev Event) {
 }
 
 func (o *Orchestrator) statusEvent() Event {
-	states := o.robot.ReadAllStatus()
+	o.mu.Lock()
+	busy := o.busy
+	o.mu.Unlock()
+
+	// Skip the heavy multi-request ReadAllStatus when a motion operation is
+	// running — it would compete for bus.mu and inflate the control-loop tick.
+	// The frontend already knows busy=true; motor data can wait until idle.
+	var states [4]robot.MotorState
+	if !busy {
+		states = o.robot.ReadAllStatus()
+	}
 	x, y := o.robot.Position()
 
 	motors := make([]MotorStatus, 4)
@@ -156,10 +174,6 @@ func (o *Orchestrator) statusEvent() Event {
 		}
 		motors[i] = ms
 	}
-
-	o.mu.Lock()
-	busy := o.busy
-	o.mu.Unlock()
 
 	return Event{
 		Kind: KindStatus,
@@ -335,4 +349,41 @@ func (o *Orchestrator) HoldTension() error {
 func (o *Orchestrator) Status() SystemStatus {
 	ev := o.statusEvent()
 	return ev.Payload.(SystemStatus)
+}
+
+// ── Debug / manual motor control ──────────────────────────────────────────────
+
+// JogMotor enables motor motorIdx (1-based in API, 0-based internally) at rpm.
+// Rejected if any motion operation is in progress.
+func (o *Orchestrator) JogMotor(motorIdx, rpm int) error {
+	o.mu.Lock()
+	busy := o.busy
+	o.mu.Unlock()
+	if busy {
+		return fmt.Errorf("robot busy — cannot jog during movement")
+	}
+	slog.Info("jog motor", "motor", motorIdx, "rpm", rpm)
+	return o.robot.JogMotor(motorIdx-1, rpm)
+}
+
+// JogStop stops a single motor immediately.
+func (o *Orchestrator) JogStop(motorIdx int) error {
+	slog.Info("jog stop", "motor", motorIdx)
+	return o.robot.JogStop(motorIdx - 1)
+}
+
+// ReadMotorStatus reads all FC04 status registers from motor motorIdx (1-based).
+func (o *Orchestrator) ReadMotorStatus(motorIdx int) (*t3d.Status, error) {
+	return o.robot.ReadMotorStatus(motorIdx - 1)
+}
+
+// WriteMotorParam writes a FC03 holding register to motor motorIdx (1-based).
+func (o *Orchestrator) WriteMotorParam(motorIdx int, addr, value uint16) error {
+	slog.Info("write motor param", "motor", motorIdx, "addr", addr, "value", value)
+	return o.robot.WriteMotorParam(motorIdx-1, addr, value)
+}
+
+// ReadMotorParam reads a FC03 holding register from motor motorIdx (1-based).
+func (o *Orchestrator) ReadMotorParam(motorIdx int, addr uint16) (uint16, error) {
+	return o.robot.ReadMotorParam(motorIdx-1, addr)
 }

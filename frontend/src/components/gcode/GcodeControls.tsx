@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { useCommand } from "@/hooks/useCommand"
+import { useWsContext } from "@/context/WsContext"
 import { toast } from "@/components/ui/use-toast"
 
 interface GcodeControlsProps {
@@ -20,6 +21,7 @@ export function GcodeControls({
   onSpeedOverrideChange,
 }: GcodeControlsProps) {
   const { run, reset, pending, messages, error } = useCommand()
+  const { client } = useWsContext()
 
   const totalLines = content.split("\n").filter((l) => l.trim()).length
   const doneLines = messages.length
@@ -46,10 +48,12 @@ export function GcodeControls({
     toast({ title: "G-code started", description: `${totalLines} commands` })
   }
 
-  const { run: stopRun } = useCommand()
   const handleStop = () => {
-    stopRun("stop")
-    toast({ title: "Stop sent", variant: "destructive" })
+    const sent = client.sendNow({ id: crypto.randomUUID(), cmd: "stop" })
+    toast({
+      title: sent ? "Stop sent" : "Not connected — stop NOT sent",
+      variant: "destructive",
+    })
   }
 
   return (

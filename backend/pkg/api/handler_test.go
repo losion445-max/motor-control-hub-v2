@@ -1,9 +1,12 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,11 +14,8 @@ import (
 	"github.com/losion445-max/motor-control-hub-v2/pkg/api"
 	"github.com/losion445-max/motor-control-hub-v2/pkg/robot"
 	"github.com/losion445-max/motor-control-hub-v2/pkg/runner"
+	"github.com/losion445-max/motor-control-hub-v2/pkg/t3d"
 	"github.com/losion445-max/motor-control-hub-v2/pkg/usecase"
-
-	"context"
-	"errors"
-	"sync"
 )
 
 // ── mock robot (mirrors usecase_test mock) ────────────────────────────────────
@@ -107,6 +107,11 @@ func (m *mockRobot) Homed() bool {
 func (m *mockRobot) ReadAllStatus() [4]robot.MotorState {
 	return [4]robot.MotorState{{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}}
 }
+func (m *mockRobot) JogMotor(_ int, _ int) error                    { return nil }
+func (m *mockRobot) JogStop(_ int) error                            { return nil }
+func (m *mockRobot) ReadMotorStatus(_ int) (*t3d.Status, error)     { return nil, nil }
+func (m *mockRobot) WriteMotorParam(_ int, _, _ uint16) error       { return nil }
+func (m *mockRobot) ReadMotorParam(_ int, _ uint16) (uint16, error) { return 0, nil }
 
 // ── test helpers ──────────────────────────────────────────────────────────────
 

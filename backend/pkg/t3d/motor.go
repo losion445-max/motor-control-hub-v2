@@ -577,7 +577,7 @@ func (m *Motor) readMotionState() (pos int32, torque int16, fault uint16, err er
 func (m *Motor) correctTo(ctx context.Context, targetPos int64) error {
 	actual, err := m.ReadAbsPosition()
 	if err != nil {
-		return nil // best-effort
+		return fmt.Errorf("correctTo: read pos: %w", err)
 	}
 
 	errPulses := targetPos - int64(actual)

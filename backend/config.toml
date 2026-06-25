@@ -10,7 +10,7 @@
 addr              = ":8080"          # HTTP listen address
 serial_port       = "/dev/ttyUSB0"  # RS-485 device
 baud_rate         = 115200            # must match drive P-179
-status_interval_ms = 20             # motor poll → WebSocket broadcast interval
+status_interval_ms = 200            # motor poll → WebSocket broadcast interval (keep ≥ 200 to avoid bus saturation during motion)
 log_format        = "text"           # "text" (dev) | "json" (prod)
 log_level         = "info"           # "debug" | "info" | "warn" | "error"
 
@@ -35,7 +35,7 @@ rpm        = 25   # winding speed during calibration
 torque_pct = 1   # torque % that signals cable is taut
 
 [safety]
-torque_pct = 1   # emergency-stop threshold (% of rated torque)
+torque_pct = 70  # emergency-stop threshold (% of rated torque); trip if |torque| ≥ this during any move
 
 [hold_tension]
 torque_pct = 1   # cable tension-hold torque cap (P-069)
@@ -63,7 +63,7 @@ approach_switch_ms  = 30      # wait between collective disable and re-enable at
 
 tick_ms           = 25   # control loop period
 correction_gain   = 2.0   # proportional cable-error gain: (mm/s) per mm of cable-length error
-fault_check_every = 3     # read fault registers every N ticks (every 75ms at 25ms tick)
+fault_check_every = 3     # DEPRECATED — fault is now checked every tick via ReadAbsPosAndFault; kept for config compat
 settle_tol_pulses = 50    # final settle: done when all cable errors < this (~2 mm)
 settle_timeout_s  = 3.0   # max wait in settle phase before giving up
 

@@ -68,10 +68,15 @@ export function WorkspaceView({
   }
 
   return (
+    <div
+      className="w-full"
+      style={{ aspectRatio: `${W}/${H}`, maxHeight: "100%" }}
+    >
     <svg
       ref={svgRef}
       viewBox={`0 0 ${W} ${H}`}
       width="100%"
+      height="100%"
       preserveAspectRatio="xMidYMid meet"
       className="cursor-crosshair rounded border border-border bg-slate-50 block"
       onClick={handleClick}
@@ -169,5 +174,6 @@ export function WorkspaceView({
         />
       </g>
     </svg>
+    </div>
   )
 }

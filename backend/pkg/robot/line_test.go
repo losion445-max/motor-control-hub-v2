@@ -10,11 +10,10 @@ import (
 
 func lineTestSys() (*System, [4]*mockMotor) {
 	cfg := defaultCfg()
-	cfg.LineTickDT = 1 * time.Millisecond   // fast tick
-	cfg.LineSettleTol = 500                  // generous settle tolerance
-	cfg.LineSettleLim = 5 * time.Second      // plenty of settle time
-	cfg.LineFaultEvery = 1000                // disable fault check for simplicity
-	cfg.LineCorrGain = 0                     // no correction term, pure feed-forward
+	cfg.LineTickDT = 1 * time.Millisecond // fast tick
+	cfg.LineSettleTol = 500               // generous settle tolerance
+	cfg.LineSettleLim = 5 * time.Second   // plenty of settle time
+	cfg.LineCorrGain = 0                  // no correction term, pure feed-forward
 
 	s, mocks := newTestSystem(cfg)
 	s.homed = true
@@ -92,9 +91,8 @@ func TestLineTo_SettleTimeout(t *testing.T) {
 	// The settle timeout should fire instead.
 	cfg := defaultCfg()
 	cfg.LineTickDT = 1 * time.Millisecond
-	cfg.LineSettleTol = 0               // never converge
+	cfg.LineSettleTol = 0                    // never converge
 	cfg.LineSettleLim = 2 * time.Millisecond // very short timeout → break fast
-	cfg.LineFaultEvery = 1000
 	cfg.LineCorrGain = 0
 
 	s, mocks := newTestSystem(cfg)
@@ -149,6 +147,7 @@ func (c *countingMock) WriteParam(addr, value uint16) error {
 	}
 	return nil
 }
+func (c *countingMock) ReadParam(_ uint16) (uint16, error) { return 0, nil }
 
 // ── LineTo ReadAbsPosition (currentCableLengths) error ───────────────────────
 
@@ -171,7 +170,6 @@ func TestLineTo_FaultDetected(t *testing.T) {
 	cfg.LineTickDT = 1 * time.Millisecond
 	cfg.LineSettleTol = 500
 	cfg.LineSettleLim = 5 * time.Second
-	cfg.LineFaultEvery = 1 // check every iteration
 	cfg.LineCorrGain = 0
 
 	s, mocks := newTestSystem(cfg)

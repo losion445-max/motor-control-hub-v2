@@ -6,6 +6,7 @@ import { WsProvider } from "@/context/WsContext"
 import { ControlPage } from "@/pages/ControlPage"
 import { GcodePage } from "@/pages/GcodePage"
 import { SettingsPage } from "@/pages/SettingsPage"
+import { DebugPage } from "@/pages/DebugPage"
 
 function loadNum(key: string, fallback: number): number {
   const v = localStorage.getItem(key)
@@ -26,6 +27,7 @@ export default function App() {
               <TabsTrigger value="control">Control</TabsTrigger>
               <TabsTrigger value="gcode">G-code</TabsTrigger>
               <TabsTrigger value="settings">Settings</TabsTrigger>
+              <TabsTrigger value="debug">Debug</TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value="control" className="flex-1 min-h-0 mt-0">
@@ -41,6 +43,9 @@ export default function App() {
               onRapidSpeedChange={setRapidSpeed}
               onFeedSpeedChange={setFeedSpeed}
             />
+          </TabsContent>
+          <TabsContent value="debug" className="flex-1 min-h-0 mt-0">
+            <DebugPage />
           </TabsContent>
         </Tabs>
       </div>

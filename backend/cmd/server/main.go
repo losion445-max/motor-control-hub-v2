@@ -147,10 +147,9 @@ func robotConfig(cfg *appcfg.Config) robot.Config {
 		DisableWait:       time.Duration(cfg.Move.DisableWaitMs) * time.Millisecond,
 		ApproachSwitch:    time.Duration(cfg.Move.ApproachSwitchMs) * time.Millisecond,
 
-		LineTickDT:     time.Duration(cfg.Line.TickMs) * time.Millisecond,
-		LineCorrGain:   cfg.Line.CorrectionGain,
-		LineFaultEvery: cfg.Line.FaultCheckEvery,
-		LineSettleTol:  int32(cfg.Line.SettleTolPulses),
-		LineSettleLim:  time.Duration(cfg.Line.SettleTimeoutS*1000) * time.Millisecond,
+		LineTickDT:    time.Duration(cfg.Line.TickMs) * time.Millisecond,
+		LineCorrGain:  cfg.Line.CorrectionGain,
+		LineSettleTol: int32(cfg.Line.SettleTolPulses),
+		LineSettleLim: time.Duration(cfg.Line.SettleTimeoutS*1000) * time.Millisecond,
 	}
 }

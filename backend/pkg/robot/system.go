@@ -18,6 +18,7 @@ type driveMotor interface {
 	Enable() error
 	Disable() error
 	WriteParam(addr, value uint16) error
+	ReadParam(addr uint16) (uint16, error)
 	ReadAbsPosition() (int32, error)
 	ReadAbsPosAndFault() (pos int32, fault uint16, err error)
 	ReadTorquePct() (int16, error)
@@ -124,7 +125,13 @@ func (s *System) Home(ctx context.Context) error {
 				if err := m.Disable(); err != nil {
 					return fmt.Errorf("home: motor %d disable: %w", i+1, err)
 				}
-				time.Sleep(30 * time.Millisecond) // let motor coast to rest before reading encoder
+				// Let motor coast to rest before reading encoder; respect ctx cancellation.
+				select {
+				case <-time.After(30 * time.Millisecond):
+				case <-ctx.Done():
+					s.EmergencyStop()
+					return ctx.Err()
+				}
 				pos, err := m.ReadAbsPosition()
 				if err != nil {
 					return fmt.Errorf("home: motor %d read pos: %w", i+1, err)
@@ -291,7 +298,11 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 	for _, m := range s.motors {
 		_ = m.Disable()
 	}
-	time.Sleep(s.cfg.DisableWait)
+	select {
+	case <-time.After(s.cfg.DisableWait):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 
 	var starts [4]int32
 	for i, m := range s.motors {
@@ -539,4 +550,48 @@ func (s *System) checkWorkspace(x, y, speed float64) error {
 func mmPerSecToRPM(mmPerSec, drumRadiusMM float64) int {
 	circumference := 2 * math.Pi * drumRadiusMM
 	return int(math.Round(mmPerSec / circumference * 60))
+}
+
+// ── Debug / manual motor control ──────────────────────────────────────────────
+
+// JogMotor enables motor motorIdx (0-based) at the given cable speed.
+// rpm > 0 winds in cable (shortens); rpm < 0 pays out (lengthens).
+// motorDir is applied so the physical cable direction is always correct.
+func (s *System) JogMotor(motorIdx, rpm int) error {
+	if motorIdx < 0 || motorIdx > 3 {
+		return fmt.Errorf("robot: invalid motor index %d", motorIdx)
+	}
+	return s.motors[motorIdx].SetSpeed(rpm * s.motorDir(motorIdx))
+}
+
+// JogStop disables motor motorIdx immediately.
+func (s *System) JogStop(motorIdx int) error {
+	if motorIdx < 0 || motorIdx > 3 {
+		return fmt.Errorf("robot: invalid motor index %d", motorIdx)
+	}
+	return s.motors[motorIdx].Disable()
+}
+
+// ReadMotorStatus reads all FC04 status registers for motor motorIdx (0-based).
+func (s *System) ReadMotorStatus(motorIdx int) (*t3d.Status, error) {
+	if motorIdx < 0 || motorIdx > 3 {
+		return nil, fmt.Errorf("robot: invalid motor index %d", motorIdx)
+	}
+	return s.motors[motorIdx].ReadStatus()
+}
+
+// WriteMotorParam writes a FC03 holding register (parameter) to motor motorIdx.
+func (s *System) WriteMotorParam(motorIdx int, addr, value uint16) error {
+	if motorIdx < 0 || motorIdx > 3 {
+		return fmt.Errorf("robot: invalid motor index %d", motorIdx)
+	}
+	return s.motors[motorIdx].WriteParam(addr, value)
+}
+
+// ReadMotorParam reads a FC03 holding register (parameter) from motor motorIdx.
+func (s *System) ReadMotorParam(motorIdx int, addr uint16) (uint16, error) {
+	if motorIdx < 0 || motorIdx > 3 {
+		return 0, fmt.Errorf("robot: invalid motor index %d", motorIdx)
+	}
+	return s.motors[motorIdx].ReadParam(addr)
 }

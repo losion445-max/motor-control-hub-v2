@@ -33,6 +33,7 @@ type mockMotor struct {
 func (m *mockMotor) Enable() error                                           { return m.enableErr }
 func (m *mockMotor) Disable() error                                          { m.callsDisable++; return m.disableErr }
 func (m *mockMotor) WriteParam(_ uint16, _ uint16) error                     { return m.writeErr }
+func (m *mockMotor) ReadParam(_ uint16) (uint16, error)                      { return 0, nil }
 func (m *mockMotor) ReadAbsPosition() (int32, error)                         { return m.absPos, m.readPosErr }
 func (m *mockMotor) ReadTorquePct() (int16, error)                           { return m.torque, m.readTorqueErr }
 func (m *mockMotor) ReadFault() (uint16, error)                              { return m.fault, m.readFaultErr }

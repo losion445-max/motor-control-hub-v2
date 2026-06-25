@@ -6,9 +6,10 @@ interface CommandState {
   pending: boolean
   messages: string[]
   error: string | null
+  payload: unknown
 }
 
-const initial: CommandState = { pending: false, messages: [], error: null }
+const initial: CommandState = { pending: false, messages: [], error: null, payload: null }
 
 export function useCommand() {
   const { client } = useWsContext()
@@ -16,7 +17,7 @@ export function useCommand() {
 
   const run = useCallback(
     (cmd: string, params: Partial<Omit<InCommand, "id" | "cmd">> = {}) => {
-      setState({ pending: true, messages: [], error: null })
+      setState({ pending: true, messages: [], error: null, payload: null })
       const id = crypto.randomUUID()
 
       client.subscribeCmd(id, (ev: OutEvent) => {
@@ -30,9 +31,10 @@ export function useCommand() {
             ...p,
             pending: false,
             messages: [...p.messages, ev.message ?? ""],
+            payload: ev.payload ?? null,
           }))
         } else if (ev.kind === "error") {
-          setState({ pending: false, messages: [], error: ev.message ?? "error" })
+          setState({ pending: false, messages: [], error: ev.message ?? "error", payload: null })
         }
       })
 

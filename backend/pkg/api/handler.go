@@ -52,6 +52,11 @@ type inMsg struct {
 	Y       float64 `json:"y"`
 	Speed   float64 `json:"speed"`
 	Program string  `json:"program"`
+	// Debug commands.
+	Motor int `json:"motor"` // 1-based motor index (1..4)
+	RPM   int `json:"rpm"`   // jog speed (positive = wind in, negative = pay out)
+	Addr  int `json:"addr"`  // FC03 parameter address
+	Value int `json:"value"` // parameter value
 }
 
 // outMsg is sent to the client.
@@ -229,6 +234,63 @@ func (h *Handler) dispatch(ctx context.Context, msg inMsg, out chan<- usecase.Ev
 		out <- usecase.Event{
 			Kind:    usecase.KindStatus,
 			Payload: h.orch.Status(),
+		}
+
+	case "jog_start":
+		if msg.Motor < 1 || msg.Motor > 4 {
+			out <- usecase.Event{Kind: usecase.KindError, Message: fmt.Sprintf("invalid motor %d (1..4)", msg.Motor)}
+			return
+		}
+		if err := h.orch.JogMotor(msg.Motor, msg.RPM); err != nil {
+			out <- usecase.Event{Kind: usecase.KindError, Message: err.Error()}
+		} else {
+			out <- usecase.Event{Kind: usecase.KindDone, Message: fmt.Sprintf("motor %d jogging at %d RPM", msg.Motor, msg.RPM)}
+		}
+
+	case "jog_stop":
+		if msg.Motor < 1 || msg.Motor > 4 {
+			out <- usecase.Event{Kind: usecase.KindError, Message: fmt.Sprintf("invalid motor %d (1..4)", msg.Motor)}
+			return
+		}
+		if err := h.orch.JogStop(msg.Motor); err != nil {
+			out <- usecase.Event{Kind: usecase.KindError, Message: err.Error()}
+		} else {
+			out <- usecase.Event{Kind: usecase.KindDone, Message: fmt.Sprintf("motor %d stopped", msg.Motor)}
+		}
+
+	case "read_motor_status":
+		if msg.Motor < 1 || msg.Motor > 4 {
+			out <- usecase.Event{Kind: usecase.KindError, Message: fmt.Sprintf("invalid motor %d (1..4)", msg.Motor)}
+			return
+		}
+		st, err := h.orch.ReadMotorStatus(msg.Motor)
+		if err != nil {
+			out <- usecase.Event{Kind: usecase.KindError, Message: err.Error()}
+		} else {
+			out <- usecase.Event{Kind: usecase.KindDone, Payload: st}
+		}
+
+	case "read_param":
+		if msg.Motor < 1 || msg.Motor > 4 {
+			out <- usecase.Event{Kind: usecase.KindError, Message: fmt.Sprintf("invalid motor %d (1..4)", msg.Motor)}
+			return
+		}
+		val, err := h.orch.ReadMotorParam(msg.Motor, uint16(msg.Addr))
+		if err != nil {
+			out <- usecase.Event{Kind: usecase.KindError, Message: err.Error()}
+		} else {
+			out <- usecase.Event{Kind: usecase.KindDone, Payload: map[string]any{"motor": msg.Motor, "addr": msg.Addr, "value": val}}
+		}
+
+	case "write_param":
+		if msg.Motor < 1 || msg.Motor > 4 {
+			out <- usecase.Event{Kind: usecase.KindError, Message: fmt.Sprintf("invalid motor %d (1..4)", msg.Motor)}
+			return
+		}
+		if err := h.orch.WriteMotorParam(msg.Motor, uint16(msg.Addr), uint16(msg.Value)); err != nil {
+			out <- usecase.Event{Kind: usecase.KindError, Message: err.Error()}
+		} else {
+			out <- usecase.Event{Kind: usecase.KindDone, Message: fmt.Sprintf("motor %d P-%03d = %d", msg.Motor, msg.Addr, msg.Value)}
 		}
 
 	default:

@@ -42,7 +42,7 @@ type Config struct {
 
 	// ── Passive tension hold ──────────────────────────────────────────────────
 
-	HoldTensionPct int // torque cap for tension-hold mode (P-069, % of rated)
+	HoldTensionPct int // torque cap for tension-hold mode (P-069/P-070, % of rated)
 	HoldTensionRPM int // slow winding speed for tension-hold mode
 
 	// ── MoveTo controller (stop-and-go trapezoidal) ───────────────────────────
@@ -60,15 +60,14 @@ type Config struct {
 
 	// ── LineTo controller (continuous closed-loop) ────────────────────────────
 
-	LineTickDT      time.Duration // control loop period
-	LineCorrGain    float64       // proportional cable-error gain: (mm/s) per mm error
-	LineFaultEvery  int           // read fault registers every N ticks
-	LineSettleTol   int32         // settle phase done when all errors < this (pulses)
-	LineSettleLim   time.Duration // max wait in settle phase
+	LineTickDT    time.Duration // control loop period
+	LineCorrGain  float64       // proportional cable-error gain: (mm/s) per mm error
+	LineSettleTol int32         // settle phase done when all errors < this (pulses)
+	LineSettleLim time.Duration // max wait in settle phase
 }
 
-// DefaultConfig matches the values in backend/config.toml and is used
-// directly in tests (no file I/O required).
+// DefaultConfig matches the values in backend/config.toml exactly.
+// Used directly in tests (no file I/O required).
 var DefaultConfig = Config{
 	WidthMM:      1400,
 	HeightMM:     2400,
@@ -76,11 +75,11 @@ var DefaultConfig = Config{
 	PulsesPerRev: 10000,
 
 	HomingRPM:       25,
-	HomingTorquePct: 18,
+	HomingTorquePct: 1,
 
-	TorqueSafetyPct: 75,
+	TorqueSafetyPct: 70,
 
-	HoldTensionPct: 30,
+	HoldTensionPct: 1,
 	HoldTensionRPM: 20,
 
 	AccelMmPerSec2: 1000,
@@ -89,14 +88,13 @@ var DefaultConfig = Config{
 	ApproachFactor:    5,
 	MinApproachPulses: 50,
 	TolerancePulses:   50,
-	PollInterval:      15 * time.Millisecond,
+	PollInterval:      10 * time.Millisecond,
 	StopSettle:        150 * time.Millisecond,
 	DisableWait:       80 * time.Millisecond,
 	ApproachSwitch:    30 * time.Millisecond,
 
-	LineTickDT:     25 * time.Millisecond,
-	LineCorrGain:   2.0,
-	LineFaultEvery: 3,
-	LineSettleTol:  50,
-	LineSettleLim:  3 * time.Second,
+	LineTickDT:    25 * time.Millisecond,
+	LineCorrGain:  2.0,
+	LineSettleTol: 50,
+	LineSettleLim: 3 * time.Second,
 }
