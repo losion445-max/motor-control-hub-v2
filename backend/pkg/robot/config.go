@@ -79,7 +79,7 @@ var DefaultConfig = Config{
 	HomingTorquePct: 5,
 
 	TorqueSafetyPct: 70,
-	MoveTorquePct:   300,
+	MoveTorquePct:   100,
 
 	HoldTensionPct: 10,
 	HoldTensionRPM: 20,
