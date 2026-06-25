@@ -137,18 +137,25 @@ func (s *System) Home(ctx context.Context) error {
 				absT = -absT
 			}
 			if int(absT) >= s.cfg.HomingTorquePct {
+				// Stop this motor: write speed=0 first (active decel, same as EmergencyStop),
+				// then servo-off so the brake can engage cleanly.
+				_ = m.WriteParam(t3d.ParamInternalSpd1, 0)
 				if err := m.Disable(); err != nil {
+					// Disable failed — stop ALL motors before propagating the error.
+					_ = s.EmergencyStop()
 					return fmt.Errorf("home: motor %d disable: %w", i+1, err)
 				}
-				// Let motor coast to rest before reading encoder; respect ctx cancellation.
+				// Let motor settle before reading encoder; respect ctx cancellation.
 				select {
 				case <-time.After(30 * time.Millisecond):
 				case <-ctx.Done():
-					s.EmergencyStop()
+					_ = s.EmergencyStop()
 					return ctx.Err()
 				}
 				pos, err := m.ReadAbsPosition()
 				if err != nil {
+					// Can't read position — stop ALL motors before propagating.
+					_ = s.EmergencyStop()
 					return fmt.Errorf("home: motor %d read pos: %w", i+1, err)
 				}
 				s.homePos[i] = pos
