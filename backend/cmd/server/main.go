@@ -132,6 +132,7 @@ func robotConfig(cfg *appcfg.Config) robot.Config {
 		HomingTorquePct: cfg.Homing.TorquePct,
 
 		TorqueSafetyPct: cfg.Safety.TorquePct,
+		MoveTorquePct:   cfg.Safety.MoveTorquePct,
 
 		HoldTensionPct: cfg.Hold.TorquePct,
 		HoldTensionRPM: cfg.Hold.RPM,

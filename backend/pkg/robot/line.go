@@ -59,6 +59,18 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 	}
 	prof := motion.New(dist, speedMmPerSec, accel)
 
+	// Restore full torque capacity before motion. Home and HoldTension leave
+	// P-069/P-070 at low values (5-10%) which prevent normal movement.
+	moveTorque := s.cfg.MoveTorquePct
+	if moveTorque <= 0 {
+		moveTorque = 300
+	}
+	for i, m := range s.motors {
+		if err := m.SetTorqueLimit(moveTorque); err != nil {
+			return fmt.Errorf("robot: motor %d restore torque limit: %w", i+1, err)
+		}
+	}
+
 	// Program hardware accel/decel ramps (P-060 / P-061) so the drive
 	// smooths out the speed-command steps between control ticks.
 	hwParam := motion.AccelToT3DParam(accel, s.cfg.DrumRadiusMM)

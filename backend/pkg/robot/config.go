@@ -39,6 +39,7 @@ type Config struct {
 	// ── Safety ────────────────────────────────────────────────────────────────
 
 	TorqueSafetyPct int // emergency stop if |torque| ≥ this during any move
+	MoveTorquePct   int // hardware torque limit during normal motion (P-069/P-070); 0 = 300% (full)
 
 	// ── Passive tension hold ──────────────────────────────────────────────────
 
@@ -78,6 +79,7 @@ var DefaultConfig = Config{
 	HomingTorquePct: 5,
 
 	TorqueSafetyPct: 70,
+	MoveTorquePct:   300,
 
 	HoldTensionPct: 1,
 	HoldTensionRPM: 20,

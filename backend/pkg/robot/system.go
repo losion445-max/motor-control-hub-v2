@@ -77,9 +77,16 @@ func (s *System) Close() error { return s.bus.Close() }
 // The camera must be placed physically near the centre before calling Home.
 // Each motor stops independently as soon as its cable becomes taut.
 func (s *System) Home(ctx context.Context) error {
+	hwLimit := s.cfg.HomingTorquePct + 5
+	slog.Info("home: start",
+		"rpm", s.cfg.HomingRPM,
+		"torque_threshold_pct", s.cfg.HomingTorquePct,
+		"hw_torque_limit_pct", hwLimit,
+	)
+
 	// Safety cap during homing.
 	for i, m := range s.motors {
-		if err := m.SetTorqueLimit(s.cfg.HomingTorquePct + 5); err != nil {
+		if err := m.SetTorqueLimit(hwLimit); err != nil {
 			return fmt.Errorf("home: motor %d set torque limit: %w", i+1, err)
 		}
 	}
@@ -94,8 +101,10 @@ func (s *System) Home(ctx context.Context) error {
 			return fmt.Errorf("home: motor %d enable: %w", i+1, err)
 		}
 	}
+	slog.Info("home: all motors enabled, winding in")
 
 	done := [4]bool{}
+	pollN := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -115,6 +124,12 @@ func (s *System) Home(ctx context.Context) error {
 			if err != nil {
 				s.EmergencyStop()
 				return fmt.Errorf("home: motor %d read torque: %w", i+1, err)
+			}
+
+			// Log every ~500ms (every 50 polls at 10ms interval) so we can
+			// see torque climbing toward the threshold without flooding the log.
+			if pollN%50 == 0 {
+				slog.Debug("home: poll", "motor", i+1, "torque_pct", torque)
 			}
 
 			absT := torque
@@ -138,8 +153,14 @@ func (s *System) Home(ctx context.Context) error {
 				}
 				s.homePos[i] = pos
 				done[i] = true
+				slog.Info("home: motor taut",
+					"motor", i+1,
+					"torque_pct", torque,
+					"encoder_pos", pos,
+				)
 			}
 		}
+		pollN++
 		if allDone {
 			break
 		}
@@ -294,6 +315,18 @@ func (s *System) Homed() bool { return s.homed }
 // Phase 2 — collective slowdown to multiApproachRPM (proportional), each motor
 // stops independently when within multiTolerance pulses of its target.
 func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int, maxSpeedRPM int, finalX, finalY float64) error {
+	// Restore full torque capacity before motion. Home and HoldTension leave
+	// P-069/P-070 at low values (5-10%) which prevent normal movement.
+	moveTorque := s.cfg.MoveTorquePct
+	if moveTorque <= 0 {
+		moveTorque = 300
+	}
+	for i, m := range s.motors {
+		if err := m.SetTorqueLimit(moveTorque); err != nil {
+			return fmt.Errorf("robot: motor %d restore torque limit: %w", i+1, err)
+		}
+	}
+
 	// Disable all and read stable start positions.
 	for _, m := range s.motors {
 		_ = m.Disable()

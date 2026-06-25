@@ -35,7 +35,8 @@ rpm        = 25   # winding speed during calibration
 torque_pct = 5   # torque % that signals cable is taut (must be above idle noise floor ~1-2%)
 
 [safety]
-torque_pct = 70  # emergency-stop threshold (% of rated torque); trip if |torque| ≥ this during any move
+torque_pct      = 70   # software emergency-stop threshold: trip if |torque| ≥ this during any move
+move_torque_pct = 300  # hardware torque limit during normal motion (P-069/P-070); 300 = full rated torque
 
 [hold_tension]
 torque_pct = 1   # cable tension-hold torque cap (P-069)

@@ -91,6 +91,11 @@ type SafetyConfig struct {
 	// TorquePct is the emergency-stop threshold (% of rated torque).
 	// If any motor exceeds this during a move, all motors are stopped.
 	TorquePct int `toml:"torque_pct"`
+
+	// MoveTorquePct is the hardware torque limit (P-069/P-070) applied before
+	// every normal motion. Overrides any lower limit left by homing or hold_tension.
+	// 300 = full rated torque (drive default).
+	MoveTorquePct int `toml:"move_torque_pct"`
 }
 
 // HoldConfig defines passive tension mode parameters.
