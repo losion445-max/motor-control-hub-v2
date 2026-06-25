@@ -81,7 +81,7 @@ var DefaultConfig = Config{
 	TorqueSafetyPct: 70,
 	MoveTorquePct:   300,
 
-	HoldTensionPct: 1,
+	HoldTensionPct: 10,
 	HoldTensionRPM: 20,
 
 	AccelMmPerSec2: 1000,

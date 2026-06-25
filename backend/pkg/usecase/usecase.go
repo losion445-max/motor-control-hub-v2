@@ -231,6 +231,9 @@ func (o *Orchestrator) Calibrate(ctx context.Context, out chan<- Event) {
 	}
 	x, y := o.robot.Position()
 	slog.Info("calibrate done", "x", x, "y", y)
+	if err := o.robot.HoldTension(); err != nil {
+		slog.Warn("calibrate: hold tension failed", "err", err)
+	}
 	out <- Event{Kind: KindDone, Message: fmt.Sprintf("homed — position declared (%.0f, %.0f)", x, y)}
 }
 
@@ -254,6 +257,9 @@ func (o *Orchestrator) Move(ctx context.Context, x, y, speed float64, out chan<-
 		return
 	}
 	slog.Info("move done", "x", x, "y", y)
+	if err := o.robot.HoldTension(); err != nil {
+		slog.Warn("move: hold tension failed", "err", err)
+	}
 	out <- Event{Kind: KindDone, Message: fmt.Sprintf("arrived (%.0f, %.0f)", x, y)}
 }
 
@@ -277,6 +283,9 @@ func (o *Orchestrator) Line(ctx context.Context, x, y, speed float64, out chan<-
 		return
 	}
 	slog.Info("line done", "x", x, "y", y)
+	if err := o.robot.HoldTension(); err != nil {
+		slog.Warn("line: hold tension failed", "err", err)
+	}
 	out <- Event{Kind: KindDone, Message: fmt.Sprintf("arrived (%.0f, %.0f)", x, y)}
 }
 

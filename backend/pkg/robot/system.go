@@ -315,8 +315,13 @@ func (s *System) Homed() bool { return s.homed }
 // Phase 2 — collective slowdown to multiApproachRPM (proportional), each motor
 // stops independently when within multiTolerance pulses of its target.
 func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int, maxSpeedRPM int, finalX, finalY float64) error {
-	// Restore full torque capacity before motion. Home and HoldTension leave
-	// P-069/P-070 at low values (5-10%) which prevent normal movement.
+	// Disable all first — stops any active HoldTension before changing torque limits.
+	for _, m := range s.motors {
+		_ = m.Disable()
+	}
+
+	// Restore full torque capacity. Home and HoldTension leave P-069/P-070 at
+	// low values (5-10%) which would prevent normal movement.
 	moveTorque := s.cfg.MoveTorquePct
 	if moveTorque <= 0 {
 		moveTorque = 300
@@ -325,11 +330,6 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 		if err := m.SetTorqueLimit(moveTorque); err != nil {
 			return fmt.Errorf("robot: motor %d restore torque limit: %w", i+1, err)
 		}
-	}
-
-	// Disable all and read stable start positions.
-	for _, m := range s.motors {
-		_ = m.Disable()
 	}
 	select {
 	case <-time.After(s.cfg.DisableWait):

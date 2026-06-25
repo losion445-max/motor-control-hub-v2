@@ -59,8 +59,13 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 	}
 	prof := motion.New(dist, speedMmPerSec, accel)
 
-	// Restore full torque capacity before motion. Home and HoldTension leave
-	// P-069/P-070 at low values (5-10%) which prevent normal movement.
+	// Disable all first — stops any active HoldTension before changing torque limits.
+	for _, m := range s.motors {
+		_ = m.Disable()
+	}
+
+	// Restore full torque capacity. Home and HoldTension leave P-069/P-070 at
+	// low values (5-10%) which would prevent normal movement.
 	moveTorque := s.cfg.MoveTorquePct
 	if moveTorque <= 0 {
 		moveTorque = 300
