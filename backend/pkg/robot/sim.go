@@ -97,10 +97,13 @@ func (m *simMotor) Disable() error {
 func (m *simMotor) WriteParam(addr, value uint16) error {
 	if addr == t3d.ParamInternalSpd1 {
 		m.mu.Lock()
-		m.speed = int16(value)
-		if m.speed >= 0 {
+		newSpeed := int16(value)
+		if newSpeed != m.speed {
+			// Any speed change resets the winding timer so the 1s homing
+			// clock starts fresh (prevents stale HoldTension timer carrying over).
 			m.windActive = false
 		}
+		m.speed = newSpeed
 		m.mu.Unlock()
 	}
 	return nil
@@ -153,10 +156,11 @@ func (m *simMotor) SetDecelTime(_ int) error { return nil }
 
 func (m *simMotor) SetSpeed(rpm int) error {
 	m.mu.Lock()
-	m.speed = int16(rpm)
-	if m.speed >= 0 {
+	newSpeed := int16(rpm)
+	if newSpeed != m.speed {
 		m.windActive = false
 	}
+	m.speed = newSpeed
 	m.mu.Unlock()
 	return nil
 }
