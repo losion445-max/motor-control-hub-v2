@@ -334,8 +334,10 @@ func (s *System) Homed() bool { return s.homed }
 // Phase 2 — collective slowdown to multiApproachRPM (proportional), each motor
 // stops independently when within multiTolerance pulses of its target.
 func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int, maxSpeedRPM int, finalX, finalY float64) error {
-	// Disable all first — stops any active HoldTension before changing torque limits.
+	// Stop all motors first — kills any active HoldTension before changing torque limits.
+	// Write P-137=0 before Disable so motors decelerate actively regardless of P-098 mode.
 	for _, m := range s.motors {
+		_ = m.WriteParam(t3d.ParamInternalSpd1, 0)
 		_ = m.Disable()
 	}
 
@@ -495,6 +497,7 @@ func (s *System) movePulses(ctx context.Context, pulses [4]int64, speeds [4]int,
 			}
 
 			if remaining <= s.cfg.TolerancePulses {
+				_ = m.WriteParam(t3d.ParamInternalSpd1, 0)
 				_ = m.Disable()
 				done[i] = true
 			}
@@ -518,6 +521,7 @@ func (s *System) collectiveSlowdown(done [4]bool, pulses [4]int64, speeds [4]int
 		if done[i] || pulses[i] == 0 {
 			continue
 		}
+		_ = m.WriteParam(t3d.ParamInternalSpd1, 0)
 		_ = m.Disable()
 	}
 	time.Sleep(s.cfg.ApproachSwitch)

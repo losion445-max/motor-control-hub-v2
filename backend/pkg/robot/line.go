@@ -59,8 +59,9 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 	}
 	prof := motion.New(dist, speedMmPerSec, accel)
 
-	// Disable all first — stops any active HoldTension before changing torque limits.
+	// Stop all motors first — kills any active HoldTension before changing torque limits.
 	for _, m := range s.motors {
+		_ = m.WriteParam(t3d.ParamInternalSpd1, 0)
 		_ = m.Disable()
 	}
 
@@ -202,6 +203,7 @@ func (s *System) LineTo(ctx context.Context, x1, y1, speedMmPerSec float64) erro
 
 	var disableErr error
 	for i, m := range s.motors {
+		_ = m.WriteParam(t3d.ParamInternalSpd1, 0)
 		if err := m.Disable(); err != nil && disableErr == nil {
 			disableErr = fmt.Errorf("robot: motor %d disable after settle: %w", i+1, err)
 		}
