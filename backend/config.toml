@@ -36,8 +36,9 @@ torque_pct = 5   # torque % that signals cable is taut (must be above idle noise
 
 [safety]
 torque_pct      = 70   # software emergency-stop threshold: trip if |torque| ≥ this during any move
-move_torque_pct = 100  # hardware torque cap during motion (P-069/P-070); 100% × 2.4 Nm / 67.8 mm = 35 N max cable force
-                       # acts as last-resort backup if the software 70% trip (safety.torque_pct) fails
+move_torque_pct = 80   # hardware torque cap during motion (P-069/P-070); 80% × 2.4 Nm / 67.8 mm = 28 N max cable force
+                       # must be > safety.torque_pct (70%) to not block normal motion, but below cable breaking load / 4
+                       # WARNING: calibrate to actual cable spec — carbon fiber rope breaks without warning
 
 [hold_tension]
 torque_pct = 10  # cable tension-hold torque cap (P-069/P-070); 10% × 2.4 Nm / 67.8 mm = 3.5 N per cable
